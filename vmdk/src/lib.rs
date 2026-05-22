@@ -29,24 +29,116 @@ pub struct VmdkReader {
 impl VmdkReader {
     /// Open a monolithic sparse VMDK disk image.
     pub fn open(path: &Path) -> Result<Self, VmdkError> {
-        todo!("implement VmdkReader::open")
+        let mut file = File::open(path)?;
+
+        let mut hdr_bytes = [0u8; 512];
+        file.read_exact(&mut hdr_bytes)?;
+        let hdr = SparseExtentHeader::parse(&hdr_bytes)?;
+
+        let grain_size_bytes = hdr.grain_size * SECTOR_SIZE;
+        let virtual_disk_size = hdr.capacity * SECTOR_SIZE;
+
+        // Load grain directory (small enough to keep in memory).
+        let num_grains = (hdr.capacity + hdr.grain_size - 1) / hdr.grain_size;
+        let num_gts = (num_grains + u64::from(hdr.num_gtes_per_gt) - 1)
+            / u64::from(hdr.num_gtes_per_gt);
+        let gd_byte_len = num_gts * 4;
+
+        file.seek(SeekFrom::Start(hdr.gd_offset * SECTOR_SIZE))?;
+        let mut gd_bytes = vec![0u8; gd_byte_len as usize];
+        file.read_exact(&mut gd_bytes)?;
+
+        let grain_dir = gd_bytes
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
+
+        Ok(VmdkReader {
+            file,
+            virtual_disk_size,
+            grain_size_bytes,
+            grain_dir,
+            num_gtes_per_gt: u64::from(hdr.num_gtes_per_gt),
+            pos: 0,
+        })
     }
 
     /// Virtual disk size in bytes as recorded in the VMDK header.
     pub fn virtual_disk_size(&self) -> u64 {
         self.virtual_disk_size
     }
+
+    /// Resolve `virtual_offset` → file offset, or `None` for a sparse grain.
+    fn file_offset_for(&mut self, virtual_offset: u64) -> io::Result<Option<u64>> {
+        let grain_idx = virtual_offset / self.grain_size_bytes;
+        let offset_in_grain = virtual_offset % self.grain_size_bytes;
+
+        let gd_idx = grain_idx / self.num_gtes_per_gt;
+        let gte_idx = grain_idx % self.num_gtes_per_gt;
+
+        let gt_sector = self.grain_dir.get(gd_idx as usize).copied().unwrap_or(0);
+        if gt_sector == 0 {
+            return Ok(None);
+        }
+
+        let gte_file_pos = u64::from(gt_sector) * SECTOR_SIZE + gte_idx * 4;
+        self.file.seek(SeekFrom::Start(gte_file_pos))?;
+        let mut gte_bytes = [0u8; 4];
+        self.file.read_exact(&mut gte_bytes)?;
+        let gte = u32::from_le_bytes(gte_bytes);
+
+        if gte <= 1 {
+            return Ok(None); // sparse or zeroed
+        }
+
+        Ok(Some(u64::from(gte) * SECTOR_SIZE + offset_in_grain))
+    }
 }
 
 impl Read for VmdkReader {
-    fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
-        todo!("implement VmdkReader::read")
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.pos >= self.virtual_disk_size || buf.is_empty() {
+            return Ok(0);
+        }
+
+        let remaining_virtual = (self.virtual_disk_size - self.pos) as usize;
+        // Don't cross a grain boundary in a single read.
+        let remaining_in_grain =
+            (self.grain_size_bytes - (self.pos % self.grain_size_bytes)) as usize;
+        let to_read = buf.len().min(remaining_virtual).min(remaining_in_grain);
+
+        let n = match self.file_offset_for(self.pos)? {
+            Some(file_off) => {
+                self.file.seek(SeekFrom::Start(file_off))?;
+                self.file.read(&mut buf[..to_read])?
+            }
+            None => {
+                // Sparse grain — return zeros.
+                buf[..to_read].fill(0);
+                to_read
+            }
+        };
+
+        self.pos += n as u64;
+        Ok(n)
     }
 }
 
 impl Seek for VmdkReader {
-    fn seek(&mut self, _pos: SeekFrom) -> io::Result<u64> {
-        todo!("implement VmdkReader::seek")
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        let new_pos = match pos {
+            SeekFrom::Start(n) => n as i64,
+            SeekFrom::Current(n) => self.pos as i64 + n,
+            SeekFrom::End(n) => self.virtual_disk_size as i64 + n,
+        };
+        if new_pos < 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "seek before start",
+            ));
+        }
+        self.pos = new_pos as u64;
+        Ok(self.pos)
     }
 }
 
