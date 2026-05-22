@@ -45,6 +45,14 @@ impl SparseExtentHeader {
             return Err(VmdkError::CompressedNotSupported);
         }
 
+        // Validate geometry before these values feed division arithmetic in the reader.
+        if grain_size == 0 {
+            return Err(VmdkError::InvalidGeometry("grain_size must be > 0".into()));
+        }
+        if num_gtes_per_gt == 0 {
+            return Err(VmdkError::InvalidGeometry("num_gtes_per_gt must be > 0".into()));
+        }
+
         Ok(SparseExtentHeader {
             capacity,
             grain_size,

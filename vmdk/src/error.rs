@@ -14,4 +14,6 @@ pub enum VmdkError {
     CompressedNotSupported,
     #[error("VMDK file too small")]
     FileTooSmall,
+    #[error("invalid VMDK geometry: {0}")]
+    InvalidGeometry(String),
 }
