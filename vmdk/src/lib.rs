@@ -163,6 +163,40 @@ mod tests {
         f
     }
 
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// Build a minimal valid VMDK header (512 bytes) with configurable geometry.
+    fn vmdk_header_bytes(capacity_sectors: u64, grain_size: u64, num_gtes_per_gt: u32) -> Vec<u8> {
+        let mut h = vec![0u8; 512];
+        h[0..4].copy_from_slice(&0x564D_444B_u32.to_le_bytes());         // magic
+        h[4..8].copy_from_slice(&1u32.to_le_bytes());                    // version 1
+        h[12..20].copy_from_slice(&capacity_sectors.to_le_bytes());      // capacity (sectors)
+        h[20..28].copy_from_slice(&grain_size.to_le_bytes());            // grain_size (sectors)
+        h[44..48].copy_from_slice(&num_gtes_per_gt.to_le_bytes());       // num_gtes_per_gt
+        // compress_algorithm at bytes 77..79 stays 0 (no compression)
+        h
+    }
+
+    // ── Panic regression tests (RED until header.rs validates grain geometry) ─
+
+    #[test]
+    fn grain_size_zero_rejected() {
+        // grain_size=0 triggers div-by-zero on `(capacity + grain_size - 1) / grain_size`
+        // (lib.rs line 42) or u64 underflow if capacity is also 0.
+        let f = write_tmp(&vmdk_header_bytes(8, 0, 512));
+        assert!(VmdkReader::open(f.path()).is_err());
+    }
+
+    #[test]
+    fn num_gtes_per_gt_zero_rejected() {
+        // num_gtes_per_gt=0 triggers div-by-zero on `(num_grains + 0 - 1) / 0`
+        // (lib.rs line 43-44).
+        let f = write_tmp(&vmdk_header_bytes(8, 8, 0));
+        assert!(VmdkReader::open(f.path()).is_err());
+    }
+
+    // ── Existing tests ────────────────────────────────────────────────────────
+
     #[test]
     fn open_nonexistent_returns_err() {
         assert!(VmdkReader::open(Path::new("/tmp/no_such.vmdk")).is_err());
