@@ -281,4 +281,48 @@ mod tests {
             let _ = VmdkReader::open(f.path());
         }
     }
+
+    // ── Differential test: bytes must match qemu-img convert -O raw output ────
+
+    #[test]
+    fn reads_match_qemu_raw_convert() {
+        const QEMU_IMG: &str = "/opt/homebrew/bin/qemu-img";
+        if !Path::new(QEMU_IMG).exists() {
+            return;
+        }
+        let tmp = tempfile::tempdir().expect("tempdir");
+
+        // 1 MiB source with a deterministic non-trivial pattern covering
+        // sector and grain boundaries (default grain = 128 sectors = 65536 B).
+        let size: usize = 1 << 20;
+        let raw_data: Vec<u8> = (0..size).map(|i| (i ^ (i >> 8)) as u8).collect();
+        let raw_path = tmp.path().join("source.raw");
+        std::fs::write(&raw_path, &raw_data).expect("write raw");
+
+        let vmdk_path = tmp.path().join("test.vmdk");
+        let status = std::process::Command::new(QEMU_IMG)
+            .args(["convert", "-O", "vmdk",
+                   raw_path.to_str().unwrap(),
+                   vmdk_path.to_str().unwrap()])
+            .status()
+            .expect("spawn qemu-img");
+        assert!(status.success(), "qemu-img convert failed");
+
+        let mut reader = VmdkReader::open(&vmdk_path).expect("open");
+        assert_eq!(reader.virtual_disk_size(), size as u64);
+
+        // Sample: start, mid-sector, grain boundary, grain+sector, near-end.
+        let grain = 512 * 128; // 65536 B — qemu default VMDK grain size
+        for &offset in &[0usize, 511, grain, grain + 512, size - 512] {
+            let len = 512.min(size - offset);
+            let mut buf = vec![0u8; len];
+            reader.seek(SeekFrom::Start(offset as u64)).expect("seek");
+            reader.read_exact(&mut buf).expect("read");
+            assert_eq!(
+                buf,
+                raw_data[offset..offset + len],
+                "byte mismatch at offset {offset:#x}",
+            );
+        }
+    }
 }
