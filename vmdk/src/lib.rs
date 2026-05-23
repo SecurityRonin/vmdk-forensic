@@ -325,4 +325,46 @@ mod tests {
             );
         }
     }
+
+    // ── Corpus differential test: qemu-img generated minimal.vmdk ────────────
+
+    #[test]
+    fn corpus_minimal_vmdk_reads_match_qemu_raw_convert() {
+        const QEMU_IMG: &str = "/opt/homebrew/bin/qemu-img";
+        if !Path::new(QEMU_IMG).exists() {
+            return;
+        }
+        let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/data/minimal.vmdk");
+        if !corpus.exists() {
+            return;
+        }
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let raw_path = tmp.path().join("minimal.raw");
+        let ok = std::process::Command::new(QEMU_IMG)
+            .args(["convert", "-O", "raw",
+                   corpus.to_str().unwrap(),
+                   raw_path.to_str().unwrap()])
+            .status().expect("spawn qemu-img").success();
+        assert!(ok, "qemu-img convert failed");
+        let ref_data = std::fs::read(&raw_path).expect("read raw");
+
+        let mut reader = VmdkReader::open(&corpus).expect("open corpus");
+        assert_eq!(reader.virtual_disk_size(), ref_data.len() as u64,
+            "virtual_disk_size must match reference raw length");
+
+        let vsize = ref_data.len();
+        let grain = 65536usize;
+        let samples = [0usize, 511, grain, grain + 512, vsize - 512];
+        for &offset in &samples {
+            let len = 512.min(vsize - offset);
+            let mut buf = vec![0u8; len];
+            reader.seek(SeekFrom::Start(offset as u64)).expect("seek");
+            reader.read_exact(&mut buf).expect("read");
+            assert_eq!(
+                buf, ref_data[offset..offset + len],
+                "byte mismatch at offset {offset:#x}",
+            );
+        }
+    }
 }
