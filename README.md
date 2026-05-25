@@ -64,6 +64,8 @@ Read-only. Flat extents and stream-optimised VMDKs are not yet supported.
 
 ## Related crates
 
+### Container readers
+
 | Crate | Format | Notes |
 |-------|--------|-------|
 | [`ewf`](https://github.com/SecurityRonin/ewf) | E01 / EWF / Ex01 | Dominant professional forensic acquisition format |
@@ -72,8 +74,14 @@ Read-only. Flat extents and stream-optimised VMDKs are not yet supported.
 | [`vhd`](https://github.com/SecurityRonin/vhd) | Legacy VHD | Virtual PC / Hyper-V Generation-1 format |
 | [`qcow2`](https://github.com/SecurityRonin/qcow2) | QCOW2 v2/v3 | QEMU / KVM / libvirt disk images |
 | [`dd`](https://github.com/SecurityRonin/dd) | Raw / flat | dd, dcfldd, dc3dd, and FTK Imager raw output |
-| [`ewf-forensic`](https://github.com/SecurityRonin/ewf-forensic) | E01 analyser | Structural integrity audit and repair for E01 images |
-| [`vhdx-forensic`](https://github.com/SecurityRonin/vhdx-forensic) | VHDX analyser | Forensic integrity analyser for VHDX containers |
+| [`iso`](https://github.com/SecurityRonin/iso) | ISO 9660 | Optical disc images: multi-session, UDF bridge, Rock Ridge, Joliet, El Torito |
+
+### Forensic analysers
+
+| Crate | Format | Notes |
+|-------|--------|-------|
+| [`ewf-forensic`](https://github.com/SecurityRonin/ewf-forensic) | E01 | Structural integrity audit, Adler-32 / MD5 hash verification, and in-memory repair |
+| [`vhdx-forensic`](https://github.com/SecurityRonin/vhdx-forensic) | VHDX | Forensic integrity analyser and in-memory repair tool for VHDX containers |
 
 ---
 
