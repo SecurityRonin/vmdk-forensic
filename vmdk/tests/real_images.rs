@@ -118,14 +118,35 @@ fn flat_vmdk_reads_return_zeros_via_open_path() {
 
 // ── Unsupported formats — must return Err, never panic ────────────────────────
 
+// stream_opt.vmdk was previously rejected with UnsupportedVersion(3).
+// After adding v3 support it must open successfully and return zeros for
+// the all-sparse empty 1 MiB disk.
+
 #[test]
-fn stream_opt_vmdk_returns_err() {
+fn stream_opt_vmdk_opens_and_has_correct_size() {
     let data = read_fixture("stream_opt.vmdk");
-    let result = vmdk::VmdkReader::open(Cursor::new(data));
-    assert!(
-        result.is_err(),
-        "streamOptimized VMDK (v3) must be rejected with Err, not panic"
+    let reader = vmdk::VmdkReader::open(Cursor::new(data))
+        .expect("streamOptimized v3 must open via open()");
+    assert_eq!(
+        reader.virtual_disk_size(),
+        1_048_576,
+        "stream_opt.vmdk: 2048 sectors * 512 = 1 MiB"
     );
+    assert_eq!(
+        reader.disk_type(),
+        "streamOptimized",
+        "stream_opt.vmdk must report createType streamOptimized"
+    );
+}
+
+#[test]
+fn stream_opt_vmdk_reads_return_zeros() {
+    let data = read_fixture("stream_opt.vmdk");
+    let mut reader = vmdk::VmdkReader::open(Cursor::new(data))
+        .expect("open stream_opt.vmdk");
+    let mut buf = [0xFFu8; 512];
+    reader.read_exact(&mut buf).expect("read sector 0");
+    assert_eq!(buf, [0u8; 512], "all-sparse streamOptimized VMDK must read as zeros");
 }
 
 #[test]

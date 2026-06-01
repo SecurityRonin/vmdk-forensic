@@ -84,14 +84,20 @@ fn info_errors_on_missing_file() {
 }
 
 #[test]
-fn info_errors_on_stream_optimized() {
+fn info_shows_stream_optimized_disk_type() {
     let out = vmdk_bin()
         .args(["info", &data_path("stream_opt.vmdk")])
         .output()
         .expect("vmdk binary must run");
     assert!(
-        !out.status.success(),
-        "streamOptimized VMDK should exit non-zero (unsupported format)"
+        out.status.success(),
+        "stream_opt.vmdk info must succeed after v3 support, exit: {}",
+        out.status
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("streamOptimized"),
+        "expected streamOptimized in output, got: {stdout}"
     );
 }
 
