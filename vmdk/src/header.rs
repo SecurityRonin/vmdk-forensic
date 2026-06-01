@@ -4,6 +4,7 @@ use crate::error::{Result, VmdkError};
 
 pub const MAGIC: u32 = 0x564D_444B;
 pub const VERSION: u32 = 1;
+pub const VERSION_STREAM_OPT: u32 = 3;
 pub const SECTOR_SIZE: u64 = 512;
 
 /// Parsed fields from the 512-byte `SparseExtentHeader`.
@@ -30,7 +31,7 @@ impl SparseExtentHeader {
         }
 
         let version = u32::from_le_bytes(data[4..8].try_into().expect("4 bytes"));
-        if version != VERSION {
+        if version != VERSION && version != VERSION_STREAM_OPT {
             return Err(VmdkError::UnsupportedVersion(version));
         }
 
@@ -42,8 +43,10 @@ impl SparseExtentHeader {
         let gd_offset = u64::from_le_bytes(data[56..64].try_into().expect("8 bytes"));
         let compress_algorithm = u16::from_le_bytes(data[77..79].try_into().expect("2 bytes"));
 
-        if compress_algorithm != 0 {
-            return Err(VmdkError::CompressedNotSupported);
+        // v1: compression must be absent; v3 (streamOptimized): deflate (1) is expected.
+        match (version, compress_algorithm) {
+            (VERSION, 0) | (VERSION_STREAM_OPT, 1) => {}
+            _ => return Err(VmdkError::CompressedNotSupported),
         }
 
         // Validate geometry before these values feed division arithmetic in the reader.
