@@ -87,6 +87,35 @@ fn dfvfs_ext2_disk_type_is_monolithic_sparse() {
     );
 }
 
+// ── flat.vmdk (twoGbMaxExtentFlat) via open_path ─────────────────────────────
+
+#[test]
+fn flat_vmdk_opens_via_open_path() {
+    let path = format!("{DATA_DIR}/flat.vmdk");
+    let reader = vmdk::VmdkReader::open_path(std::path::Path::new(&path))
+        .expect("flat.vmdk must open via open_path");
+    assert_eq!(
+        reader.virtual_disk_size(),
+        1_048_576,
+        "flat.vmdk: 2048 sectors * 512 = 1 MiB virtual disk"
+    );
+    assert_eq!(
+        reader.disk_type(),
+        "twoGbMaxExtentFlat",
+        "flat.vmdk must report createType twoGbMaxExtentFlat"
+    );
+}
+
+#[test]
+fn flat_vmdk_reads_return_zeros_via_open_path() {
+    let path = format!("{DATA_DIR}/flat.vmdk");
+    let mut reader = vmdk::VmdkReader::open_path(std::path::Path::new(&path))
+        .expect("open flat.vmdk via open_path");
+    let mut buf = [0xFFu8; 512];
+    reader.read_exact(&mut buf).expect("read sector 0");
+    assert_eq!(buf, [0u8; 512], "flat-f001.vmdk is entirely zero");
+}
+
 // ── Unsupported formats — must return Err, never panic ────────────────────────
 
 #[test]

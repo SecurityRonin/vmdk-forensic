@@ -106,3 +106,21 @@ fn info_errors_on_flat_descriptor() {
         "flat VMDK descriptor should exit non-zero (unsupported format)"
     );
 }
+
+#[test]
+fn info_shows_flat_vmdk_disk_type() {
+    let out = vmdk_bin()
+        .args(["info", &data_path("flat.vmdk")])
+        .output()
+        .expect("vmdk binary must run");
+    assert!(
+        out.status.success(),
+        "flat.vmdk info must succeed after open_path support, exit: {}",
+        out.status
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("twoGbMaxExtentFlat"),
+        "expected twoGbMaxExtentFlat in output, got: {stdout}"
+    );
+}
