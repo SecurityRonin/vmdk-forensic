@@ -190,3 +190,34 @@ fn vmdk_reader_cursor_is_send() {
     fn assert_send<T: Send>() {}
     assert_send::<VmdkReader<Cursor<Vec<u8>>>>();
 }
+
+// ── disk_type ─────────────────────────────────────────────────────────────────
+
+#[test]
+fn disk_type_is_monolithic_sparse_for_minimal_vmdk() {
+    let img = minimal_vmdk(&[0u8; SECTOR_SIZE]);
+    let reader = VmdkReader::open(Cursor::new(img)).expect("open");
+    assert_eq!(
+        reader.disk_type(),
+        "monolithicSparse",
+        "embedded descriptor createType must be monolithicSparse"
+    );
+}
+
+#[test]
+fn disk_type_is_empty_when_no_descriptor() {
+    // vmdk_header_bytes sets descriptor_offset=0, descriptor_size=0 → no descriptor.
+    // We need a minimal VMDK that actually has a valid GD so open() succeeds.
+    // Use minimal_vmdk but zero out the descriptor fields in the header.
+    let mut img = minimal_vmdk(&[0u8; SECTOR_SIZE]);
+    // bytes 28..36 = descriptor_offset → set to 0
+    img[28..36].copy_from_slice(&0u64.to_le_bytes());
+    // bytes 36..44 = descriptor_size → set to 0
+    img[36..44].copy_from_slice(&0u64.to_le_bytes());
+    let reader = VmdkReader::open(Cursor::new(img)).expect("open");
+    assert_eq!(
+        reader.disk_type(),
+        "",
+        "disk_type must be empty string when descriptor_offset=0"
+    );
+}

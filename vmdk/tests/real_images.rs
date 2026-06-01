@@ -64,6 +64,30 @@ fn dfvfs_ext2_vmdk_read_is_stable() {
     assert_eq!(a, b, "repeated reads at offset 0 must be identical");
 }
 
+// ── disk_type from embedded descriptor ───────────────────────────────────────
+
+#[test]
+fn minimal_vmdk_disk_type_is_monolithic_sparse() {
+    let data = read_fixture("minimal.vmdk");
+    let reader = vmdk::VmdkReader::open(Cursor::new(data)).expect("open");
+    assert_eq!(
+        reader.disk_type(),
+        "monolithicSparse",
+        "minimal.vmdk must report createType monolithicSparse"
+    );
+}
+
+#[test]
+fn dfvfs_ext2_disk_type_is_monolithic_sparse() {
+    let data = read_fixture("dfvfs_ext2.vmdk");
+    let reader = vmdk::VmdkReader::open(Cursor::new(data)).expect("open");
+    assert_eq!(
+        reader.disk_type(),
+        "monolithicSparse",
+        "dfvfs_ext2.vmdk (VMware4 origin) must report createType monolithicSparse"
+    );
+}
+
 // ── Unsupported formats — must return Err, never panic ────────────────────────
 
 #[test]
