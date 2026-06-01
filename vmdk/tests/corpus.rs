@@ -1,4 +1,4 @@
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use vmdk::VmdkReader;
 
@@ -13,7 +13,8 @@ fn corpus_sparse_vmdk_opens_and_has_nonzero_size() {
     if !path.exists() {
         return;
     }
-    let reader = VmdkReader::open(&path).expect("open sparse.vmdk");
+    let data = std::fs::read(&path).expect("read sparse.vmdk");
+    let reader = VmdkReader::open(Cursor::new(data)).expect("open sparse.vmdk");
     assert!(reader.virtual_disk_size() > 0, "virtual_disk_size must be > 0");
 }
 
@@ -24,7 +25,8 @@ fn corpus_sparse_vmdk_read_is_stable() {
     if !path.exists() {
         return;
     }
-    let mut reader = VmdkReader::open(&path).expect("open");
+    let data = std::fs::read(&path).expect("read sparse.vmdk");
+    let mut reader = VmdkReader::open(Cursor::new(data)).expect("open");
     let mut buf = [0u8; 512];
     reader.seek(SeekFrom::Start(0)).expect("seek");
     reader.read_exact(&mut buf).expect("read sector 0");

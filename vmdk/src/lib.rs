@@ -3,9 +3,7 @@
 //! Supports monolithic sparse VMDKs (VMware Workstation/Fusion format).
 //! Flat extents and compressed (stream-optimized) VMDKs are not supported.
 
-use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
-use std::path::Path;
 
 mod error;
 mod header;
@@ -14,11 +12,22 @@ pub use error::VmdkError;
 
 use header::{SparseExtentHeader, SECTOR_SIZE};
 
-/// Read-only VMDK container reader.
+/// Read-only VMDK container reader, generic over any `Read + Seek` source.
 ///
 /// Implements `Read + Seek` over the virtual sector stream.
-pub struct VmdkReader {
-    file: File,
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::fs::File;
+/// use vmdk::VmdkReader;
+///
+/// let file = File::open("disk.vmdk").unwrap();
+/// let mut reader = VmdkReader::open(file).unwrap();
+/// println!("virtual disk size: {} bytes", reader.virtual_disk_size());
+/// ```
+pub struct VmdkReader<R: Read + Seek> {
+    inner: R,
     virtual_disk_size: u64,
     grain_size_bytes: u64,
     grain_dir: Vec<u32>,
@@ -26,13 +35,11 @@ pub struct VmdkReader {
     pos: u64,
 }
 
-impl VmdkReader {
-    /// Open a monolithic sparse VMDK disk image.
-    pub fn open(path: &Path) -> Result<Self, VmdkError> {
-        let mut file = File::open(path)?;
-
+impl<R: Read + Seek> VmdkReader<R> {
+    /// Open a monolithic sparse VMDK from any `Read + Seek` source.
+    pub fn open(mut reader: R) -> Result<Self, VmdkError> {
         let mut hdr_bytes = [0u8; 512];
-        file.read_exact(&mut hdr_bytes)?;
+        reader.read_exact(&mut hdr_bytes)?;
         let hdr = SparseExtentHeader::parse(&hdr_bytes)?;
 
         let grain_size_bytes = hdr.grain_size.checked_mul(SECTOR_SIZE)
@@ -56,9 +63,9 @@ impl VmdkReader {
         }
         let gd_sector_offset = hdr.gd_offset.checked_mul(SECTOR_SIZE)
             .ok_or_else(|| VmdkError::InvalidGeometry("gd_offset overflow".into()))?;
-        file.seek(SeekFrom::Start(gd_sector_offset))?;
+        reader.seek(SeekFrom::Start(gd_sector_offset))?;
         let mut gd_bytes = vec![0u8; gd_byte_len as usize];
-        file.read_exact(&mut gd_bytes)?;
+        reader.read_exact(&mut gd_bytes)?;
 
         let grain_dir = gd_bytes
             .chunks_exact(4)
@@ -66,7 +73,7 @@ impl VmdkReader {
             .collect();
 
         Ok(VmdkReader {
-            file,
+            inner: reader,
             virtual_disk_size,
             grain_size_bytes,
             grain_dir,
@@ -94,9 +101,9 @@ impl VmdkReader {
         }
 
         let gte_file_pos = u64::from(gt_sector) * SECTOR_SIZE + gte_idx * 4;
-        self.file.seek(SeekFrom::Start(gte_file_pos))?;
+        self.inner.seek(SeekFrom::Start(gte_file_pos))?;
         let mut gte_bytes = [0u8; 4];
-        self.file.read_exact(&mut gte_bytes)?;
+        self.inner.read_exact(&mut gte_bytes)?;
         let gte = u32::from_le_bytes(gte_bytes);
 
         if gte <= 1 {
@@ -107,7 +114,7 @@ impl VmdkReader {
     }
 }
 
-impl Read for VmdkReader {
+impl<R: Read + Seek> Read for VmdkReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.pos >= self.virtual_disk_size || buf.is_empty() {
             return Ok(0);
@@ -121,8 +128,8 @@ impl Read for VmdkReader {
 
         let n = match self.file_offset_for(self.pos)? {
             Some(file_off) => {
-                self.file.seek(SeekFrom::Start(file_off))?;
-                self.file.read(&mut buf[..to_read])?
+                self.inner.seek(SeekFrom::Start(file_off))?;
+                self.inner.read(&mut buf[..to_read])?
             }
             None => {
                 // Sparse grain — return zeros.
@@ -136,7 +143,7 @@ impl Read for VmdkReader {
     }
 }
 
-impl Seek for VmdkReader {
+impl<R: Read + Seek> Seek for VmdkReader<R> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         let new_pos = match pos {
             SeekFrom::Start(n) => n as i64,
@@ -166,14 +173,8 @@ mod testutil;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use testutil::test_sparse_vmdk;
-
-    fn write_tmp(data: &[u8]) -> tempfile::NamedTempFile {
-        use std::io::Write;
-        let mut f = tempfile::NamedTempFile::new().unwrap();
-        f.write_all(data).unwrap();
-        f
-    }
+    use std::io::Cursor;
+    use testutil::{test_sparse_vmdk, GRAIN_SIZE_BYTES};
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -194,45 +195,34 @@ mod tests {
     #[test]
     fn grain_size_zero_rejected() {
         // grain_size=0 triggers div-by-zero on `(capacity + grain_size - 1) / grain_size`
-        // (lib.rs line 42) or u64 underflow if capacity is also 0.
-        let f = write_tmp(&vmdk_header_bytes(8, 0, 512));
-        assert!(VmdkReader::open(f.path()).is_err());
+        let img = vmdk_header_bytes(8, 0, 512);
+        assert!(VmdkReader::open(Cursor::new(img)).is_err());
     }
 
     #[test]
     fn num_gtes_per_gt_zero_rejected() {
         // num_gtes_per_gt=0 triggers div-by-zero on `(num_grains + 0 - 1) / 0`
-        // (lib.rs line 43-44).
-        let f = write_tmp(&vmdk_header_bytes(8, 8, 0));
-        assert!(VmdkReader::open(f.path()).is_err());
+        let img = vmdk_header_bytes(8, 8, 0);
+        assert!(VmdkReader::open(Cursor::new(img)).is_err());
     }
 
     // ── Existing tests ────────────────────────────────────────────────────────
 
     #[test]
-    fn open_nonexistent_returns_err() {
-        assert!(VmdkReader::open(Path::new("/tmp/no_such.vmdk")).is_err());
-    }
-
-    #[test]
     fn open_empty_file_returns_err() {
-        let f = write_tmp(&[]);
-        assert!(VmdkReader::open(f.path()).is_err());
+        assert!(VmdkReader::open(Cursor::new(vec![])).is_err());
     }
 
     #[test]
     fn open_non_vmdk_file_returns_err() {
-        let f = write_tmp(b"this is not a vmdk file at all");
-        assert!(VmdkReader::open(f.path()).is_err());
+        assert!(VmdkReader::open(Cursor::new(b"this is not a vmdk file at all".to_vec())).is_err());
     }
 
     #[test]
     fn sparse_vmdk_virtual_disk_size() {
         let vmdk = test_sparse_vmdk(&[0u8; 512]);
-        let f = write_tmp(&vmdk);
-        let reader = VmdkReader::open(f.path()).expect("open");
-        // 1 grain of 8 sectors = 4096 bytes
-        assert_eq!(reader.virtual_disk_size(), testutil::GRAIN_SIZE_BYTES as u64);
+        let reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        assert_eq!(reader.virtual_disk_size(), GRAIN_SIZE_BYTES as u64);
     }
 
     #[test]
@@ -241,8 +231,7 @@ mod tests {
         data[42] = 0xDE;
         data[43] = 0xAD;
         let vmdk = test_sparse_vmdk(&data);
-        let f = write_tmp(&vmdk);
-        let mut reader = VmdkReader::open(f.path()).expect("open");
+        let mut reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
         let mut buf = vec![0u8; 512];
         reader.read_exact(&mut buf).expect("read");
         assert_eq!(buf[42], 0xDE);
@@ -251,12 +240,11 @@ mod tests {
 
     #[test]
     fn seek_and_read_at_offset() {
-        let mut data = vec![0u8; testutil::GRAIN_SIZE_BYTES];
+        let mut data = vec![0u8; GRAIN_SIZE_BYTES];
         data[100] = 0xBE;
         data[101] = 0xEF;
         let vmdk = test_sparse_vmdk(&data);
-        let f = write_tmp(&vmdk);
-        let mut reader = VmdkReader::open(f.path()).expect("open");
+        let mut reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
         reader.seek(SeekFrom::Start(100)).unwrap();
         let mut buf = [0u8; 2];
         reader.read_exact(&mut buf).unwrap();
@@ -266,7 +254,7 @@ mod tests {
     #[test]
     fn vmdk_reader_is_send() {
         fn assert_send<T: Send>() {}
-        assert_send::<VmdkReader>();
+        assert_send::<VmdkReader<Cursor<Vec<u8>>>>();
     }
 
     // ── Property tests: open() never panics on arbitrary input ────────────────
@@ -276,8 +264,7 @@ mod tests {
         fn open_never_panics_on_arbitrary_bytes(
             bytes in proptest::collection::vec(proptest::prelude::any::<u8>(), 0..8192)
         ) {
-            let f = write_tmp(&bytes);
-            let _ = VmdkReader::open(f.path());
+            let _ = VmdkReader::open(Cursor::new(bytes));
         }
 
         #[test]
@@ -289,8 +276,7 @@ mod tests {
             bytes[0..4].copy_from_slice(&0x564D_444B_u32.to_le_bytes());
             bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
             bytes.extend_from_slice(&suffix);
-            let f = write_tmp(&bytes);
-            let _ = VmdkReader::open(f.path());
+            let _ = VmdkReader::open(Cursor::new(bytes));
         }
     }
 
@@ -298,8 +284,9 @@ mod tests {
 
     #[test]
     fn reads_match_qemu_raw_convert() {
+        use std::fs::File;
         const QEMU_IMG: &str = "/opt/homebrew/bin/qemu-img";
-        if !Path::new(QEMU_IMG).exists() {
+        if !std::path::Path::new(QEMU_IMG).exists() {
             return;
         }
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -320,7 +307,8 @@ mod tests {
             .expect("spawn qemu-img");
         assert!(status.success(), "qemu-img convert failed");
 
-        let mut reader = VmdkReader::open(&vmdk_path).expect("open");
+        let file = File::open(&vmdk_path).expect("open vmdk file");
+        let mut reader = VmdkReader::open(file).expect("open");
         assert_eq!(reader.virtual_disk_size(), size as u64);
 
         // Sample: start, mid-sector, grain boundary, grain+sector, near-end.
@@ -342,16 +330,12 @@ mod tests {
 
     #[test]
     fn corpus_dfvfs_ext2_vmdk_reads_match_qemu_raw_convert() {
-        // dfvfs_ext2.vmdk was created by the dfvfs project (Apache-2.0).
-        // It is in VMware4/monolithicSparse format (virtualHWVersion=4) with
-        // a real ext2 filesystem — NOT generated by qemu-img, so it exercises
-        // VMDK fields that QEMU-generated files may not produce.
-        // SHA-256: 578b5f75af790030113a92c4227c6e53dad53a17e65cb491781dc75b3cef31f8
+        use std::fs::File;
         const QEMU_IMG: &str = "/opt/homebrew/bin/qemu-img";
-        if !Path::new(QEMU_IMG).exists() {
+        if !std::path::Path::new(QEMU_IMG).exists() {
             return;
         }
-        let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/data/dfvfs_ext2.vmdk");
         if !corpus.exists() {
             return;
@@ -366,7 +350,8 @@ mod tests {
         assert!(ok, "qemu-img convert failed for dfvfs_ext2.vmdk");
         let ref_data = std::fs::read(&raw_path).expect("read reference raw");
 
-        let mut reader = VmdkReader::open(&corpus).expect("open dfvfs_ext2.vmdk");
+        let file = File::open(&corpus).expect("open dfvfs_ext2.vmdk");
+        let mut reader = VmdkReader::open(file).expect("open");
         assert_eq!(reader.virtual_disk_size(), ref_data.len() as u64,
             "virtual_disk_size must match qemu-img raw for dfvfs_ext2.vmdk");
 
@@ -390,11 +375,12 @@ mod tests {
 
     #[test]
     fn corpus_minimal_vmdk_reads_match_qemu_raw_convert() {
+        use std::fs::File;
         const QEMU_IMG: &str = "/opt/homebrew/bin/qemu-img";
-        if !Path::new(QEMU_IMG).exists() {
+        if !std::path::Path::new(QEMU_IMG).exists() {
             return;
         }
-        let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/data/minimal.vmdk");
         if !corpus.exists() {
             return;
@@ -409,7 +395,8 @@ mod tests {
         assert!(ok, "qemu-img convert failed");
         let ref_data = std::fs::read(&raw_path).expect("read raw");
 
-        let mut reader = VmdkReader::open(&corpus).expect("open corpus");
+        let file = File::open(&corpus).expect("open corpus vmdk");
+        let mut reader = VmdkReader::open(file).expect("open");
         assert_eq!(reader.virtual_disk_size(), ref_data.len() as u64,
             "virtual_disk_size must match reference raw length");
 
