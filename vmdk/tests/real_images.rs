@@ -108,3 +108,16 @@ fn flat_vmdk_descriptor_returns_err() {
         "monolithic flat VMDK descriptor must be rejected with Err, not panic"
     );
 }
+
+#[test]
+fn flat_f001_vmdk_returns_err() {
+    // flat-f001.vmdk is the raw extent data file for flat.vmdk.
+    // Its first 4 bytes are 0x00000000 — valid file size but zero magic.
+    // Must be rejected as BadMagic, never panic.
+    let data = read_fixture("flat-f001.vmdk");
+    let result = vmdk::VmdkReader::open(Cursor::new(data));
+    assert!(
+        result.is_err(),
+        "flat extent data (zero magic) must be rejected with Err, not panic"
+    );
+}
