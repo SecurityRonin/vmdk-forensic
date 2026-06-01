@@ -14,7 +14,6 @@ pub struct SparseExtentHeader {
     pub descriptor_size: u64,     // in sectors
     pub num_gtes_per_gt: u32,
     pub gd_offset: u64,           // grain directory offset in sectors
-    pub compress_algorithm: u16,
 }
 
 impl SparseExtentHeader {
@@ -23,23 +22,23 @@ impl SparseExtentHeader {
             return Err(VmdkError::FileTooSmall);
         }
 
-        let magic = u32::from_le_bytes(data[0..4].try_into().unwrap());
+        let magic = u32::from_le_bytes(data[0..4].try_into().expect("4 bytes"));
         if magic != MAGIC {
             return Err(VmdkError::BadMagic);
         }
 
-        let version = u32::from_le_bytes(data[4..8].try_into().unwrap());
+        let version = u32::from_le_bytes(data[4..8].try_into().expect("4 bytes"));
         if version != VERSION {
             return Err(VmdkError::UnsupportedVersion(version));
         }
 
-        let capacity = u64::from_le_bytes(data[12..20].try_into().unwrap());
-        let grain_size = u64::from_le_bytes(data[20..28].try_into().unwrap());
-        let descriptor_offset = u64::from_le_bytes(data[28..36].try_into().unwrap());
-        let descriptor_size = u64::from_le_bytes(data[36..44].try_into().unwrap());
-        let num_gtes_per_gt = u32::from_le_bytes(data[44..48].try_into().unwrap());
-        let gd_offset = u64::from_le_bytes(data[56..64].try_into().unwrap());
-        let compress_algorithm = u16::from_le_bytes(data[77..79].try_into().unwrap());
+        let capacity = u64::from_le_bytes(data[12..20].try_into().expect("8 bytes"));
+        let grain_size = u64::from_le_bytes(data[20..28].try_into().expect("8 bytes"));
+        let descriptor_offset = u64::from_le_bytes(data[28..36].try_into().expect("8 bytes"));
+        let descriptor_size = u64::from_le_bytes(data[36..44].try_into().expect("8 bytes"));
+        let num_gtes_per_gt = u32::from_le_bytes(data[44..48].try_into().expect("4 bytes"));
+        let gd_offset = u64::from_le_bytes(data[56..64].try_into().expect("8 bytes"));
+        let compress_algorithm = u16::from_le_bytes(data[77..79].try_into().expect("2 bytes"));
 
         if compress_algorithm != 0 {
             return Err(VmdkError::CompressedNotSupported);
@@ -60,7 +59,6 @@ impl SparseExtentHeader {
             descriptor_size,
             num_gtes_per_gt,
             gd_offset,
-            compress_algorithm,
         })
     }
 }

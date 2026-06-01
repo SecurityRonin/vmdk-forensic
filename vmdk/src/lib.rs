@@ -33,6 +33,54 @@ pub struct VmdkReader<R: Read + Seek> {
     grain_dir: Vec<u32>,
     num_gtes_per_gt: u64,
     pos: u64,
+    disk_type: Box<str>,
+}
+
+/// Maximum bytes we'll read from the embedded descriptor (64 KiB is far more than any
+/// real descriptor; guards against crafted images with huge `descriptor_size` values).
+const MAX_DESCRIPTOR_BYTES: u64 = 64 * 1024;
+
+/// Read the embedded text descriptor and extract the `createType` field value.
+///
+/// Returns an empty `Box<str>` when there is no embedded descriptor
+/// (`descriptor_offset == 0` or `descriptor_size == 0`).
+fn read_descriptor_create_type<R: Read + Seek>(
+    reader: &mut R,
+    hdr: &SparseExtentHeader,
+) -> io::Result<Box<str>> {
+    if hdr.descriptor_offset == 0 || hdr.descriptor_size == 0 {
+        return Ok(Box::from(""));
+    }
+    let byte_offset = hdr
+        .descriptor_offset
+        .checked_mul(SECTOR_SIZE)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "descriptor_offset overflow"))?;
+    let byte_len = hdr
+        .descriptor_size
+        .checked_mul(SECTOR_SIZE)
+        .unwrap_or(MAX_DESCRIPTOR_BYTES)
+        .min(MAX_DESCRIPTOR_BYTES);
+    reader.seek(SeekFrom::Start(byte_offset))?;
+    let mut buf = vec![0u8; byte_len as usize];
+    reader.read_exact(&mut buf)?;
+    Ok(Box::from(parse_create_type(&buf)))
+}
+
+/// Scan a raw descriptor buffer for `createType="<value>"` and return the value.
+///
+/// Stops at the first NUL byte so trailing padding does not affect parsing.
+fn parse_create_type(buf: &[u8]) -> &str {
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    let text = match std::str::from_utf8(&buf[..end]) {
+        Ok(s) => s,
+        Err(_) => return "",
+    };
+    for line in text.lines() {
+        if let Some(rest) = line.trim().strip_prefix("createType=") {
+            return rest.trim_matches('"');
+        }
+    }
+    ""
 }
 
 impl<R: Read + Seek> VmdkReader<R> {
@@ -46,6 +94,9 @@ impl<R: Read + Seek> VmdkReader<R> {
             .ok_or_else(|| VmdkError::InvalidGeometry("grain_size overflow".into()))?;
         let virtual_disk_size = hdr.capacity.checked_mul(SECTOR_SIZE)
             .ok_or_else(|| VmdkError::InvalidGeometry("capacity overflow".into()))?;
+
+        // Parse embedded descriptor for createType ("monolithicSparse", etc.).
+        let disk_type = read_descriptor_create_type(&mut reader, &hdr)?;
 
         // Load grain directory (small enough to keep in memory).
         let num_grains = hdr.capacity.checked_add(hdr.grain_size - 1)
@@ -69,7 +120,7 @@ impl<R: Read + Seek> VmdkReader<R> {
 
         let grain_dir = gd_bytes
             .chunks_exact(4)
-            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+            .map(|c| u32::from_le_bytes(c.try_into().expect("4-byte chunk from chunks_exact(4)")))
             .collect();
 
         Ok(VmdkReader {
@@ -79,12 +130,20 @@ impl<R: Read + Seek> VmdkReader<R> {
             grain_dir,
             num_gtes_per_gt: u64::from(hdr.num_gtes_per_gt),
             pos: 0,
+            disk_type,
         })
     }
 
     /// Virtual disk size in bytes as recorded in the VMDK header.
     pub fn virtual_disk_size(&self) -> u64 {
         self.virtual_disk_size
+    }
+
+    /// `createType` field from the embedded text descriptor (e.g. `"monolithicSparse"`).
+    ///
+    /// Returns an empty string if the VMDK has no embedded descriptor.
+    pub fn disk_type(&self) -> &str {
+        &self.disk_type
     }
 
     /// Resolve `virtual_offset` → file offset, or `None` for a sparse grain.
@@ -126,16 +185,13 @@ impl<R: Read + Seek> Read for VmdkReader<R> {
             (self.grain_size_bytes - (self.pos % self.grain_size_bytes)) as usize;
         let to_read = buf.len().min(remaining_virtual).min(remaining_in_grain);
 
-        let n = match self.file_offset_for(self.pos)? {
-            Some(file_off) => {
-                self.inner.seek(SeekFrom::Start(file_off))?;
-                self.inner.read(&mut buf[..to_read])?
-            }
-            None => {
-                // Sparse grain — return zeros.
-                buf[..to_read].fill(0);
-                to_read
-            }
+        let n = if let Some(file_off) = self.file_offset_for(self.pos)? {
+            self.inner.seek(SeekFrom::Start(file_off))?;
+            self.inner.read(&mut buf[..to_read])?
+        } else {
+            // Sparse grain — return zeros.
+            buf[..to_read].fill(0);
+            to_read
         };
 
         self.pos += n as u64;
@@ -245,9 +301,9 @@ mod tests {
         data[101] = 0xEF;
         let vmdk = test_sparse_vmdk(&data);
         let mut reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
-        reader.seek(SeekFrom::Start(100)).unwrap();
+        reader.seek(SeekFrom::Start(100)).expect("seek");
         let mut buf = [0u8; 2];
-        reader.read_exact(&mut buf).unwrap();
+        reader.read_exact(&mut buf).expect("read");
         assert_eq!(buf, [0xBE, 0xEF]);
     }
 
@@ -301,8 +357,8 @@ mod tests {
         let vmdk_path = tmp.path().join("test.vmdk");
         let status = std::process::Command::new(QEMU_IMG)
             .args(["convert", "-O", "vmdk",
-                   raw_path.to_str().unwrap(),
-                   vmdk_path.to_str().unwrap()])
+                   raw_path.to_str().expect("UTF-8 path"),
+                   vmdk_path.to_str().expect("UTF-8 path")])
             .status()
             .expect("spawn qemu-img");
         assert!(status.success(), "qemu-img convert failed");
@@ -344,8 +400,8 @@ mod tests {
         let raw_path = tmp.path().join("ext2.raw");
         let ok = std::process::Command::new(QEMU_IMG)
             .args(["convert", "-O", "raw",
-                   corpus.to_str().unwrap(),
-                   raw_path.to_str().unwrap()])
+                   corpus.to_str().expect("UTF-8 path"),
+                   raw_path.to_str().expect("UTF-8 path")])
             .status().expect("spawn qemu-img").success();
         assert!(ok, "qemu-img convert failed for dfvfs_ext2.vmdk");
         let ref_data = std::fs::read(&raw_path).expect("read reference raw");
@@ -389,8 +445,8 @@ mod tests {
         let raw_path = tmp.path().join("minimal.raw");
         let ok = std::process::Command::new(QEMU_IMG)
             .args(["convert", "-O", "raw",
-                   corpus.to_str().unwrap(),
-                   raw_path.to_str().unwrap()])
+                   corpus.to_str().expect("UTF-8 path"),
+                   raw_path.to_str().expect("UTF-8 path")])
             .status().expect("spawn qemu-img").success();
         assert!(ok, "qemu-img convert failed");
         let ref_data = std::fs::read(&raw_path).expect("read raw");
