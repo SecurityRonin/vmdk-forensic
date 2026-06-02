@@ -204,6 +204,13 @@ impl<R: Read + Seek> VmdkReader<R> {
     pub fn open(mut reader: R) -> Result<Self, VmdkError> {
         let mut hdr_bytes = [0u8; 512];
         reader.read_exact(&mut hdr_bytes)?;
+
+        // Detect COWD magic ("COWD", big-endian) before attempting VMDK4 parse.
+        let magic_be = u32::from_be_bytes(hdr_bytes[0..4].try_into().expect("4 bytes"));
+        if magic_be == cowd::COWD_MAGIC {
+            return Self::open_cowd(reader, &hdr_bytes);
+        }
+
         let hdr = SparseExtentHeader::parse(&hdr_bytes)?;
 
         let grain_size_bytes = hdr
@@ -332,6 +339,42 @@ impl<R: Read + Seek> VmdkReader<R> {
             compressed,
             descriptor_text: self.descriptor_text.to_string(),
         }
+    }
+
+    /// Open a COWD extent file (vmfsSparse / vmfsThin).
+    ///
+    /// Called from `open()` when COWD magic is detected.
+    fn open_cowd(mut reader: R, hdr_bytes: &[u8]) -> Result<Self, VmdkError> {
+        use cowd::{COWD_GTES_PER_GT, open_cowd};
+
+        // Reader is positioned after the 512-byte header; seek back to start so
+        // open_cowd() can re-read the header for its own parsing.
+        reader.seek(SeekFrom::Start(0))?;
+        let (grain_dir, grain_size_bytes) = open_cowd(&mut reader)?;
+
+        // COWD capacity is 32-bit sectors; derive virtual_disk_size.
+        let cowd_hdr = cowd::CowdHeader::parse(hdr_bytes)?;
+        let virtual_disk_size = u64::from(cowd_hdr.capacity)
+            .checked_mul(SECTOR_SIZE)
+            .ok_or_else(|| VmdkError::InvalidGeometry("COWD capacity overflow".into()))?;
+
+        Ok(VmdkReader {
+            inner: reader,
+            fmt: FormatState::Sparse {
+                grain_dir,
+                grain_size_bytes,
+                num_gtes_per_gt: COWD_GTES_PER_GT as u64,
+                compressed: false,
+            },
+            virtual_disk_size,
+            disk_type: Box::from("vmfsSparse"),
+            pos: 0,
+            version: 1,
+            cid: 0xffff_ffff,
+            parent_cid: 0xffff_ffff,
+            descriptor_text: Box::from(""),
+            gt_cache: HashMap::new(),
+        })
     }
 
     /// Returns `true` if the 512-byte sector at `lba` is allocated (non-sparse).
