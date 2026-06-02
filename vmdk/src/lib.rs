@@ -37,6 +37,34 @@ impl<T: Read + Seek> ReadSeek for T {}
 /// multi-file flat extents that cannot be opened from a single stream.
 pub type VmdkFileReader = VmdkReader<Box<dyn ReadSeek + Send>>;
 
+/// Structured metadata for a VMDK virtual disk.
+///
+/// Returned by [`VmdkReader::info`].  All fields are `Clone`-able so callers
+/// can store or serialise the snapshot independently of the reader.
+#[derive(Debug, Clone)]
+pub struct VmdkInfo {
+    /// `createType` from the embedded descriptor (e.g. `"monolithicSparse"`).
+    pub disk_type: String,
+    /// Header format version: 1 for `monolithicSparse`; 3 for `streamOptimized`; 0 for flat.
+    pub version: u32,
+    /// Content ID (CID) from the descriptor, or `0xffff_ffff` if absent.
+    pub cid: u32,
+    /// Parent content ID; `0xffff_ffff` means no parent (not a delta/snapshot).
+    pub parent_cid: u32,
+    /// Grain size in sectors (0 for flat/raw extents).
+    pub grain_size_sectors: u64,
+    /// Grain size in bytes (0 for flat/raw extents).
+    pub grain_size_bytes: u64,
+    /// Total virtual disk size in bytes.
+    pub virtual_disk_size: u64,
+    /// Total virtual disk size in 512-byte sectors.
+    pub sector_count: u64,
+    /// `true` for `streamOptimized` VMDKs whose allocated grains are zlib-compressed.
+    pub compressed: bool,
+    /// Raw embedded descriptor text; empty when no embedded descriptor is present.
+    pub descriptor_text: String,
+}
+
 // ── Internal format dispatch ──────────────────────────────────────────────────
 
 enum FormatState {
@@ -219,6 +247,21 @@ impl<R: Read + Seek> VmdkReader<R> {
     /// Returns an empty string when no embedded descriptor is present.
     pub fn disk_type(&self) -> &str {
         &self.disk_type
+    }
+
+    /// Virtual disk size in 512-byte sectors.
+    pub fn sector_count(&self) -> u64 {
+        todo!("sector_count not yet implemented")
+    }
+
+    /// Raw embedded descriptor text; empty when no embedded descriptor is present.
+    pub fn descriptor_text(&self) -> &str {
+        todo!("descriptor_text not yet implemented")
+    }
+
+    /// Structured snapshot of all metadata for this image.
+    pub fn info(&self) -> VmdkInfo {
+        todo!("info not yet implemented")
     }
 
     /// Resolve `virtual_offset` to a [`GrainLookup`] describing where to find the data.
@@ -579,6 +622,74 @@ mod tests {
             bytes.extend_from_slice(&suffix);
             let _ = VmdkReader::open(Cursor::new(bytes));
         }
+    }
+
+    // ── VmdkInfo / metadata API ───────────────────────────────────────────────
+
+    #[test]
+    fn sector_count_is_virtual_size_over_512() {
+        let vmdk = test_sparse_vmdk(&[0u8; 512]);
+        let reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        assert_eq!(reader.sector_count() * 512, reader.virtual_disk_size());
+    }
+
+    #[test]
+    fn descriptor_text_contains_create_type() {
+        let vmdk = test_sparse_vmdk(&[0u8; 512]);
+        let reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let text = reader.descriptor_text();
+        assert!(
+            text.contains("monolithicSparse"),
+            "descriptor_text must contain createType; got: {text:?}"
+        );
+    }
+
+    #[test]
+    fn info_disk_type_matches_disk_type_method() {
+        let vmdk = test_sparse_vmdk(&[0u8; 512]);
+        let reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let info = reader.info();
+        assert_eq!(info.disk_type, reader.disk_type());
+    }
+
+    #[test]
+    fn info_virtual_disk_size_and_sector_count_consistent() {
+        let vmdk = test_sparse_vmdk(&[0u8; 512]);
+        let reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let info = reader.info();
+        assert_eq!(info.virtual_disk_size, reader.virtual_disk_size());
+        assert_eq!(info.sector_count * 512, info.virtual_disk_size);
+    }
+
+    #[test]
+    fn info_grain_size_bytes_is_sectors_times_512() {
+        let vmdk = test_sparse_vmdk(&[0u8; 512]);
+        let reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let info = reader.info();
+        assert_eq!(info.grain_size_bytes, info.grain_size_sectors * 512);
+        assert!(info.grain_size_sectors >= 8, "grain_size_sectors must meet VDF 1.1 minimum");
+    }
+
+    #[test]
+    fn info_cid_parsed_from_descriptor() {
+        // testutil embeds CID=fffffffe in the descriptor.
+        let vmdk = test_sparse_vmdk(&[0u8; 512]);
+        let reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let info = reader.info();
+        assert_eq!(info.cid, 0xffff_fffe, "CID must be parsed from embedded descriptor");
+        assert_eq!(
+            info.parent_cid, 0xffff_ffff,
+            "parentCID must be 0xffffffff (no parent) for a base image"
+        );
+    }
+
+    #[test]
+    fn info_version_is_one_for_monolithic_sparse() {
+        let vmdk = test_sparse_vmdk(&[0u8; 512]);
+        let reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let info = reader.info();
+        assert_eq!(info.version, 1);
+        assert!(!info.compressed);
     }
 
     // ── Fuzz / malicious-input defence ───────────────────────────────────────
