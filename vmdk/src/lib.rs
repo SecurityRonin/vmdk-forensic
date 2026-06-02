@@ -411,7 +411,34 @@ impl<R: Read + Seek> VmdkReader<R> {
     /// Reads from the current seek position (normally the caller should seek to 0 first).
     /// Uses a 64 KiB streaming buffer to avoid loading the whole disk into memory.
     pub fn hash(&mut self) -> io::Result<VmdkDigest> {
-        todo!("hash not yet implemented")
+        use md5::Md5;
+        use sha2::{Digest as _, Sha256};
+
+        let mut sha = Sha256::new();
+        let mut md = Md5::new();
+        let mut buf = vec![0u8; 65536];
+        loop {
+            let n = self.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            sha.update(&buf[..n]);
+            md.update(&buf[..n]);
+        }
+        let sha_bytes = sha.finalize();
+        let md_bytes = md.finalize();
+        Ok(VmdkDigest {
+            sha256: sha_bytes.iter().fold(String::with_capacity(64), |mut s, b| {
+                use std::fmt::Write as _;
+                let _ = write!(s, "{b:02x}");
+                s
+            }),
+            md5: md_bytes.iter().fold(String::with_capacity(32), |mut s, b| {
+                use std::fmt::Write as _;
+                let _ = write!(s, "{b:02x}");
+                s
+            }),
+        })
     }
 
     /// Number of grain tables currently held in the GT cache.
