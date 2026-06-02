@@ -269,7 +269,7 @@ impl VmdkFileReader {
             // real VMware output. Reject other flat createTypes (e.g.
             // monolithicFlat) explicitly rather than opening them with
             // unverified behaviour.
-            if desc.create_type.as_ref() != "twoGbMaxExtentFlat" {
+            if !matches!(desc.create_type.as_ref(), "twoGbMaxExtentFlat" | "monolithicFlat") {
                 return Err(VmdkError::UnsupportedDiskType(
                     desc.create_type.into_string(),
                 ));
