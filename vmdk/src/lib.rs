@@ -19,7 +19,7 @@ pub use error::VmdkError;
 
 use descriptor::parse_text_descriptor;
 use flat::MultiExtentReader;
-use header::{SparseExtentHeader, SECTOR_SIZE};
+use header::{GD_AT_END, SparseExtentHeader, SECTOR_SIZE};
 use sparse_multi::MultiSparseReader;
 
 // ── Public API types ──────────────────────────────────────────────────────────
@@ -172,8 +172,18 @@ impl<R: Read + Seek> VmdkReader<R> {
                 "grain directory too large".into(),
             ));
         }
-        let gd_sector_offset = hdr
-            .gd_offset
+        // For streamOptimized, the primary header carries GD_AT_END as a sentinel;
+        // the real GD offset is in the footer header at file_end − 1024 (VDF 1.1 §4.6).
+        let gd_offset = if hdr.gd_offset == GD_AT_END {
+            reader.seek(SeekFrom::End(-1024))?;
+            let mut footer_bytes = [0u8; 512];
+            reader.read_exact(&mut footer_bytes)?;
+            SparseExtentHeader::parse(&footer_bytes)?.gd_offset
+        } else {
+            hdr.gd_offset
+        };
+
+        let gd_sector_offset = gd_offset
             .checked_mul(SECTOR_SIZE)
             .ok_or_else(|| VmdkError::InvalidGeometry("gd_offset overflow".into()))?;
         reader.seek(SeekFrom::Start(gd_sector_offset))?;

@@ -7,6 +7,13 @@ pub const VERSION: u32 = 1;
 pub const VERSION_STREAM_OPT: u32 = 3;
 pub const SECTOR_SIZE: u64 = 512;
 
+/// Sentinel `gdOffset` in the *primary* header of a `streamOptimized` extent.
+///
+/// When `gdOffset == GD_AT_END` the real GD location is in the *footer* header
+/// appended to the end of the file: `SparseExtentHeader` at `file_end − 1024`,
+/// followed by an EOS marker at `file_end − 512` (VDF 1.1 §4.6).
+pub const GD_AT_END: u64 = 0xffff_ffff_ffff_ffff;
+
 /// Parsed fields from the 512-byte `SparseExtentHeader`.
 pub struct SparseExtentHeader {
     pub capacity: u64,          // virtual disk size in sectors
@@ -44,6 +51,10 @@ impl SparseExtentHeader {
         let compress_algorithm = u16::from_le_bytes(data[77..79].try_into().expect("2 bytes"));
 
         // v1: compression must be absent; v3 (streamOptimized): deflate (1) is expected.
+        // Spec note (VDF 1.1 §4.4): COMPRESSION_DEFLATE is described as RFC 1951 (raw
+        // DEFLATE), but both VMware tooling and QEMU actually produce RFC 1950 payloads
+        // (2-byte zlib header + DEFLATE stream + Adler-32 trailer).  Use ZlibDecoder,
+        // not DeflateDecoder — the spec has a documentation error.
         match (version, compress_algorithm) {
             (VERSION, 0) | (VERSION_STREAM_OPT, 1) => {}
             _ => return Err(VmdkError::CompressedNotSupported),
