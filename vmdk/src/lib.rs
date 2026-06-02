@@ -1,8 +1,9 @@
 //! Pure-Rust read-only VMDK disk image reader.
 //!
 //! Supports monolithic sparse (`monolithicSparse`), stream-optimised
-//! (`streamOptimized`, sparse-grain read), and flat-extent VMDKs
-//! (`twoGbMaxExtentFlat`).
+//! (`streamOptimized`, including allocated compressed grains), flat-extent
+//! VMDKs (`twoGbMaxExtentFlat`, `monolithicFlat`), and multi-file sparse
+//! extents (`twoGbMaxExtentSparse`).
 
 use std::fs::File;
 use std::io::{self, BufReader, Read, Seek, SeekFrom};
@@ -12,12 +13,14 @@ mod descriptor;
 pub(crate) mod error;
 mod flat;
 mod header;
+mod sparse_multi;
 
 pub use error::VmdkError;
 
 use descriptor::parse_text_descriptor;
 use flat::MultiExtentReader;
 use header::{SparseExtentHeader, SECTOR_SIZE};
+use sparse_multi::MultiSparseReader;
 
 // ── Public API types ──────────────────────────────────────────────────────────
 
@@ -41,12 +44,28 @@ enum FormatState {
         grain_dir: Vec<u32>,
         grain_size_bytes: u64,
         num_gtes_per_gt: u64,
-        /// `true` for stream-optimised (v3) VMDKs; allocated grains would be
-        /// DEFLATE-compressed and are not yet supported for reading.
+        /// `true` for stream-optimised VMDKs: allocated grains carry a zlib-wrapped payload.
         compressed: bool,
     },
     /// Raw flat extents — reads pass through directly to the inner reader.
     Flat,
+}
+
+/// Result of resolving a virtual offset to a physical grain location.
+enum GrainLookup {
+    /// Grain is not allocated — fill output with zeros.
+    Sparse,
+    /// Grain is uncompressed; data begins at this file byte offset.
+    FileOffset(u64),
+    /// Grain is zlib-compressed (streamOptimized); `data_offset` is the first
+    /// byte of compressed payload (after the 12-byte `GrainMarker` header),
+    /// `data_size` is the compressed length, and `offset_in_grain` is where
+    /// to start reading within the decompressed grain.
+    Compressed {
+        data_offset: u64,
+        data_size: u32,
+        offset_in_grain: u64,
+    },
 }
 
 // ── VmdkReader ────────────────────────────────────────────────────────────────
@@ -192,11 +211,8 @@ impl<R: Read + Seek> VmdkReader<R> {
         &self.disk_type
     }
 
-    /// Resolve `virtual_offset` to a file byte offset, or `None` for a sparse grain.
-    ///
-    /// Returns `Err` if the grain is allocated but compressed (stream-optimised
-    /// VMDKs with actual grain data are not yet supported).
-    fn file_offset_for(&mut self, virtual_offset: u64) -> io::Result<Option<u64>> {
+    /// Resolve `virtual_offset` to a [`GrainLookup`] describing where to find the data.
+    fn grain_location(&mut self, virtual_offset: u64) -> io::Result<GrainLookup> {
         let (gt_sector, gte_idx, offset_in_grain, compressed) = {
             let FormatState::Sparse {
                 grain_dir,
@@ -205,7 +221,7 @@ impl<R: Read + Seek> VmdkReader<R> {
                 compressed,
             } = &self.fmt
             else {
-                return Ok(None); // Flat — no GTE lookup
+                return Ok(GrainLookup::Sparse); // Flat — not reached from Read::read
             };
             let grain_idx = virtual_offset / grain_size_bytes;
             let offset_in_grain = virtual_offset % grain_size_bytes;
@@ -215,7 +231,7 @@ impl<R: Read + Seek> VmdkReader<R> {
             (gt_sector, gte_idx, offset_in_grain, *compressed)
         };
         if gt_sector == 0 {
-            return Ok(None);
+            return Ok(GrainLookup::Sparse);
         }
         let gte_file_pos = u64::from(gt_sector) * SECTOR_SIZE + gte_idx * 4;
         self.inner.seek(SeekFrom::Start(gte_file_pos))?;
@@ -223,15 +239,51 @@ impl<R: Read + Seek> VmdkReader<R> {
         self.inner.read_exact(&mut gte_bytes)?;
         let gte = u32::from_le_bytes(gte_bytes);
         if gte <= 1 {
-            return Ok(None); // sparse or explicitly-zeroed grain
+            return Ok(GrainLookup::Sparse); // sparse or explicitly-zeroed grain
         }
         if compressed {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "allocated compressed grains (streamOptimized) are not yet supported",
-            ));
+            // GrainMarker layout: u64 LBA (8 bytes) + u32 dataSize (4 bytes) + data.
+            let marker_offset = u64::from(gte) * SECTOR_SIZE;
+            self.inner.seek(SeekFrom::Start(marker_offset))?;
+            let mut marker_hdr = [0u8; 12];
+            self.inner.read_exact(&mut marker_hdr)?;
+            let data_size = u32::from_le_bytes(marker_hdr[8..12].try_into().expect("4 bytes"));
+            return Ok(GrainLookup::Compressed {
+                data_offset: marker_offset + 12,
+                data_size,
+                offset_in_grain,
+            });
         }
-        Ok(Some(u64::from(gte) * SECTOR_SIZE + offset_in_grain))
+        Ok(GrainLookup::FileOffset(
+            u64::from(gte) * SECTOR_SIZE + offset_in_grain,
+        ))
+    }
+
+    /// Decompress a zlib-wrapped grain and copy the requested slice into `buf`.
+    fn read_compressed_grain(
+        &mut self,
+        buf: &mut [u8],
+        data_offset: u64,
+        data_size: u32,
+        offset_in_grain: u64,
+    ) -> io::Result<usize> {
+        use flate2::read::ZlibDecoder;
+
+        self.inner.seek(SeekFrom::Start(data_offset))?;
+        let mut compressed = vec![0u8; data_size as usize];
+        self.inner.read_exact(&mut compressed)?;
+
+        let mut decoder = ZlibDecoder::new(compressed.as_slice());
+        let mut grain_data = Vec::new();
+        decoder.read_to_end(&mut grain_data)?;
+
+        let start = offset_in_grain as usize;
+        let end = (start + buf.len()).min(grain_data.len());
+        let n = end.saturating_sub(start);
+        if n > 0 {
+            buf[..n].copy_from_slice(&grain_data[start..end]);
+        }
+        Ok(n)
     }
 }
 
@@ -252,42 +304,44 @@ impl VmdkFileReader {
         };
 
         if first_byte == b'#' {
-            // Text descriptor: parse extents and build a multi-file reader.
+            // Text descriptor: parse extents and route by createType.
             let text = std::fs::read_to_string(path)?;
             let desc = parse_text_descriptor(&text)?;
-
-            // Reject descriptors whose extents are entirely non-FLAT (e.g.
-            // twoGbMaxExtentSparse). Returning Ok with 0 bytes would silently
-            // mislead callers into thinking the disk is empty.
-            if desc.extents.is_empty() && !desc.create_type.is_empty() {
-                return Err(VmdkError::UnsupportedDiskType(
-                    desc.create_type.into_string(),
-                ));
-            }
-
-            // Allowlist: only twoGbMaxExtentFlat has been validated against
-            // real VMware output. Reject other flat createTypes (e.g.
-            // monolithicFlat) explicitly rather than opening them with
-            // unverified behaviour.
-            if !matches!(desc.create_type.as_ref(), "twoGbMaxExtentFlat" | "monolithicFlat") {
-                return Err(VmdkError::UnsupportedDiskType(
-                    desc.create_type.into_string(),
-                ));
-            }
-
             let dir = path.parent().unwrap_or(Path::new("."));
-            let multi = MultiExtentReader::open(dir, &desc.extents)?;
-            let virtual_disk_size = desc
-                .capacity_sectors
-                .checked_mul(SECTOR_SIZE)
-                .ok_or_else(|| VmdkError::InvalidGeometry("capacity overflow".into()))?;
-            Ok(VmdkReader {
-                inner: Box::new(multi) as Box<dyn ReadSeek + Send>,
-                fmt: FormatState::Flat,
-                virtual_disk_size,
-                disk_type: desc.create_type,
-                pos: 0,
-            })
+
+            match desc.create_type.as_ref() {
+                "twoGbMaxExtentFlat" | "monolithicFlat" => {
+                    let multi = MultiExtentReader::open(dir, &desc.extents)?;
+                    let virtual_disk_size = desc
+                        .capacity_sectors
+                        .checked_mul(SECTOR_SIZE)
+                        .ok_or_else(|| VmdkError::InvalidGeometry("capacity overflow".into()))?;
+                    Ok(VmdkReader {
+                        inner: Box::new(multi) as Box<dyn ReadSeek + Send>,
+                        fmt: FormatState::Flat,
+                        virtual_disk_size,
+                        disk_type: desc.create_type,
+                        pos: 0,
+                    })
+                }
+                "twoGbMaxExtentSparse" => {
+                    let multi = MultiSparseReader::open(dir, &desc.sparse_extents)?;
+                    let virtual_disk_size = desc
+                        .sparse_capacity_sectors
+                        .checked_mul(SECTOR_SIZE)
+                        .ok_or_else(|| VmdkError::InvalidGeometry("capacity overflow".into()))?;
+                    Ok(VmdkReader {
+                        inner: Box::new(multi) as Box<dyn ReadSeek + Send>,
+                        fmt: FormatState::Flat,
+                        virtual_disk_size,
+                        disk_type: desc.create_type,
+                        pos: 0,
+                    })
+                }
+                _ => Err(VmdkError::UnsupportedDiskType(
+                    desc.create_type.into_string(),
+                )),
+            }
         } else {
             // Binary VMDK — parse normally then erase the reader type.
             let file = BufReader::new(File::open(path)?);
@@ -336,12 +390,21 @@ impl<R: Read + Seek> Read for VmdkReader<R> {
         let remaining_in_grain = (grain_size_bytes - (self.pos % grain_size_bytes)) as usize;
         let to_read = buf.len().min(remaining_virtual).min(remaining_in_grain);
 
-        let n = if let Some(file_off) = self.file_offset_for(self.pos)? {
-            self.inner.seek(SeekFrom::Start(file_off))?;
-            self.inner.read(&mut buf[..to_read])?
-        } else {
-            buf[..to_read].fill(0);
-            to_read
+        let location = self.grain_location(self.pos)?;
+        let n = match location {
+            GrainLookup::Sparse => {
+                buf[..to_read].fill(0);
+                to_read
+            }
+            GrainLookup::FileOffset(file_off) => {
+                self.inner.seek(SeekFrom::Start(file_off))?;
+                self.inner.read(&mut buf[..to_read])?
+            }
+            GrainLookup::Compressed {
+                data_offset,
+                data_size,
+                offset_in_grain,
+            } => self.read_compressed_grain(&mut buf[..to_read], data_offset, data_size, offset_in_grain)?,
         };
 
         self.pos += n as u64;

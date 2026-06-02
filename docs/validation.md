@@ -158,7 +158,7 @@ Descriptor-only test committed as `ms3-win.vmdk` (see corpus file 6 above).
 | VMware Workstation 7 origin | External | pWnOS v2.0 |
 | VMware Workstation 13 origin | External | Metasploitable3 descriptor |
 | Sparse grains (GTE=0 → zeros) | Yes | all monolithicSparse images |
-| GTE=1 (explicitly zeroed) | Unit test | handled in `file_offset_for` |
+| GTE=1 (explicitly zeroed) | Unit test | handled in `grain_location` |
 | Allocated grains (real data) | Yes | `dfvfs_ext2.vmdk`, `plaso_image.vmdk` |
 | `streamOptimized` v3 (all-sparse) | Yes | `stream_opt.vmdk` |
 | `twoGbMaxExtentFlat` | Yes | `flat.vmdk` + `flat-f001.vmdk` |

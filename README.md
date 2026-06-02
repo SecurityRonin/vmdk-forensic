@@ -75,10 +75,11 @@ let reader = VmdkReader::open_path(std::path::Path::new("disk.vmdk"))?;
 ## Library features
 
 - **monolithicSparse** — VMware Workstation / Fusion / ESXi sparse images; two-level GD/GT grain lookup
-- **streamOptimized (v3)** — QEMU-generated empty sparse disks; header version 3 + compress=1; all-sparse grains read as zeros without DEFLATE
-- **twoGbMaxExtentFlat** — multi-file flat extent descriptors; opens via `open_path`, which resolves extent files relative to the descriptor
+- **streamOptimized** — sparse and compressed (zlib / RFC 1950) grains; `GrainMarker` decoded at read time
+- **twoGbMaxExtentFlat / monolithicFlat** — multi-file flat extent descriptors; opens via `open_path`
+- **twoGbMaxExtentSparse** — multi-file sparse extent descriptors; each extent is an independent binary VMDK with its own GD/GT
 - **O(1) virtual offset resolution** — GD loaded at open, one GT read + one seek per grain access
-- **Graceful rejection** — unsupported formats (`twoGbMaxExtentSparse`, compressed grains, bad magic) return `Err`, never panic
+- **Graceful rejection** — unknown formats and bad magic return `Err`, never panic
 - **Fuzz-hardened** — proptest + cargo-fuzz; all corpus inputs verified not to panic
 - **Zero unsafe code** — `#![forbid(unsafe_code)]`
 - **MIT licensed** — no GPL, safe for proprietary DFIR tooling
@@ -89,12 +90,12 @@ let reader = VmdkReader::open_path(std::path::Path::new("disk.vmdk"))?;
 |--------|:------:|
 | `monolithicSparse` (v1) | ✓ |
 | `streamOptimized` (v3, all-sparse) | ✓ |
+| `streamOptimized` (v3, compressed grains) | ✓ |
 | `twoGbMaxExtentFlat` | ✓ (`open_path` only) |
-| `twoGbMaxExtentSparse` | Err (planned) |
-| `monolithicFlat` | Err (planned) |
-| Compressed grains (allocated streamOptimized) | Err (planned) |
+| `monolithicFlat` | ✓ (`open_path` only) |
+| `twoGbMaxExtentSparse` | ✓ (`open_path` only) |
 
-`VmdkReader::open` and `open_path` return `Err` (never panic) on unsupported inputs.
+`VmdkReader::open` and `open_path` return `Err` (never panic) on unrecognised inputs.
 
 ## Format overview
 
@@ -112,7 +113,7 @@ Virtual offset resolution is O(1): one GD lookup (in-memory `Vec<u32>`) + one GT
 
 ## Testing
 
-- **57 tests** across 7 suites (unit, integration, fuzz seeds, corpus differential)
+- **54 tests** across 3 suites (unit, integration real-images, integration synthetic)
 - Validated against real VMware-generated images from the [dfvfs](https://github.com/log2timeline/dfvfs)
   and [plaso](https://github.com/log2timeline/plaso) forensics test corpora
 - External validation against pWnOS v2.0 (VulnHub, VMware Workstation 7, 40 GiB sparse image)

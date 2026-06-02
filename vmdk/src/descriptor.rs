@@ -5,9 +5,14 @@ use crate::error::{Result, VmdkError};
 /// Parsed text VMDK descriptor.
 pub(crate) struct TextDescriptor {
     pub create_type: Box<str>,
+    /// FLAT extents (twoGbMaxExtentFlat, monolithicFlat).
     pub extents: Vec<ExtentEntry>,
+    /// SPARSE extents (twoGbMaxExtentSparse) — each is a binary VMDK with its own GD/GT.
+    pub sparse_extents: Vec<SparseEntry>,
     /// Sum of all FLAT extent sector counts.
     pub capacity_sectors: u64,
+    /// Sum of all SPARSE extent sector counts.
+    pub sparse_capacity_sectors: u64,
 }
 
 /// A single flat extent entry from the descriptor.
@@ -18,14 +23,21 @@ pub(crate) struct ExtentEntry {
     pub file_byte_offset: u64,
 }
 
-/// Parse a VMDK text descriptor, collecting `createType` and FLAT extents.
+/// A single sparse extent entry from the descriptor (twoGbMaxExtentSparse).
 ///
-/// Non-FLAT extent types (SPARSE, ZERO, VMFS) are ignored; they require
-/// separate per-extent binary VMDK parsing which is not yet implemented.
+/// Each extent is an independent binary VMDK file with its own sparse header and GD/GT.
+pub(crate) struct SparseEntry {
+    pub size_sectors: u64,
+    pub filename: Box<str>,
+}
+
+/// Parse a VMDK text descriptor, collecting `createType`, FLAT extents, and SPARSE extents.
 pub(crate) fn parse_text_descriptor(text: &str) -> Result<TextDescriptor> {
     let mut create_type = Box::from("");
     let mut extents = Vec::new();
+    let mut sparse_extents = Vec::new();
     let mut capacity_sectors = 0u64;
+    let mut sparse_capacity_sectors = 0u64;
 
     for line in text.lines() {
         let line = line.trim();
@@ -41,13 +53,22 @@ pub(crate) fn parse_text_descriptor(text: &str) -> Result<TextDescriptor> {
                 .checked_add(ext.size_sectors)
                 .ok_or_else(|| VmdkError::InvalidGeometry("extent capacity overflow".into()))?;
             extents.push(ext);
+            continue;
+        }
+        if let Some(ext) = try_parse_sparse_extent(line) {
+            sparse_capacity_sectors = sparse_capacity_sectors
+                .checked_add(ext.size_sectors)
+                .ok_or_else(|| VmdkError::InvalidGeometry("sparse extent capacity overflow".into()))?;
+            sparse_extents.push(ext);
         }
     }
 
     Ok(TextDescriptor {
         create_type,
         extents,
+        sparse_extents,
         capacity_sectors,
+        sparse_capacity_sectors,
     })
 }
 
@@ -94,6 +115,42 @@ fn try_parse_flat_extent(line: &str) -> Option<ExtentEntry> {
     })
 }
 
+/// Parse `<access> <n> SPARSE "<file>"` lines.
+///
+/// Returns `None` for non-SPARSE types or malformed input.
+fn try_parse_sparse_extent(line: &str) -> Option<SparseEntry> {
+    let mut rest = line;
+
+    let (access, tail) = split_token(rest)?;
+    if !matches!(access, "RW" | "RDONLY") {
+        return None;
+    }
+    rest = tail;
+
+    let (sectors_str, tail) = split_token(rest)?;
+    let size_sectors: u64 = sectors_str.parse().ok()?;
+    rest = tail;
+
+    let (ext_type, tail) = split_token(rest)?;
+    if ext_type != "SPARSE" {
+        return None;
+    }
+    rest = tail.trim_start();
+
+    let filename = if let Some(inner) = rest.strip_prefix('"') {
+        let close = inner.find('"')?;
+        &inner[..close]
+    } else {
+        let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        &rest[..end]
+    };
+
+    Some(SparseEntry {
+        size_sectors,
+        filename: Box::from(filename),
+    })
+}
+
 /// Split leading non-whitespace token from `s`; return `(token, rest_trimmed)`.
 fn split_token(s: &str) -> Option<(&str, &str)> {
     let s = s.trim_start();
@@ -129,10 +186,14 @@ RW 2048 FLAT "flat-f001.vmdk" 0
     }
 
     #[test]
-    fn parse_ignores_sparse_extents() {
-        let text = "createType=\"monolithicSparse\"\nRW 128 SPARSE \"disk.vmdk\"\n";
+    fn parse_sparse_extents() {
+        let text = "createType=\"twoGbMaxExtentSparse\"\nRW 8192 SPARSE \"disk-s001.vmdk\"\nRW 8192 SPARSE \"disk-s002.vmdk\"\n";
         let d = parse_text_descriptor(text).expect("parse");
-        assert_eq!(d.extents.len(), 0, "SPARSE extents must be ignored");
+        assert_eq!(d.extents.len(), 0);
+        assert_eq!(d.sparse_extents.len(), 2);
+        assert_eq!(d.sparse_extents[0].filename.as_ref(), "disk-s001.vmdk");
+        assert_eq!(d.sparse_extents[0].size_sectors, 8192);
+        assert_eq!(d.sparse_capacity_sectors, 16384);
     }
 
     #[test]
