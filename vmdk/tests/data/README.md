@@ -23,6 +23,17 @@ These files serve as regression seeds: the reader must not panic on any of them.
 - **dfvfs_ext2.vmdk**: from [log2timeline/dfvfs](https://github.com/log2timeline/dfvfs) `test_data/ext2.vmdk` (Apache 2.0).
 - **plaso_image.vmdk**: from [log2timeline/plaso](https://github.com/log2timeline/plaso) `test_data/image.vmdk` (Apache 2.0). VMware Workstation 4 era (`virtualHWVersion=4`, `adapterType=ide`). 200-sector disk with real filesystem data.
 
+## External validation (not committed)
+
+These real-world VMDKs were validated against the reader but are too large to commit:
+
+| File | Source | Size | Virtual size | Result |
+|------|--------|------|-------------|--------|
+| `Ubuntu Server v11.04 64-bit-cl1.vmdk` | pWnOS v2.0, VulnHub | 1.3 GB | 40 GiB | Opens OK; GD at sector 5151; MBR boot sector read from grain |
+
+pWnOS v2.0 download: `https://download.vulnhub.com/pwnos/pWnOS_v2.0.7z`  
+Validation: `cargo run -p vmdk-cli -- info "<path>"` reported `monolithicSparse`, 42,949,672,960 bytes. Grain lookup navigated GD→GT→grain at sector 10368, read 414 non-zero bytes (x86 MBR boot code).
+
 ## Regenerating qemu-img files
 
 ```sh
