@@ -42,6 +42,7 @@ pub type VmdkFileReader = VmdkReader<Box<dyn ReadSeek + Send>>;
 ///
 /// Returned by [`VmdkReader::iter_allocated_grains`].
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AllocatedGrain {
     /// First LBA (512-byte sector number) of this allocated range.
     pub start_lba: u64,
@@ -54,6 +55,7 @@ pub struct AllocatedGrain {
 /// Returned by [`VmdkReader::info`].  All fields are `Clone`-able so callers
 /// can store or serialise the snapshot independently of the reader.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VmdkInfo {
     /// `createType` from the embedded descriptor (e.g. `"monolithicSparse"`).
     pub disk_type: String,
@@ -788,6 +790,33 @@ mod tests {
             bytes.extend_from_slice(&suffix);
             let _ = VmdkReader::open(Cursor::new(bytes));
         }
+    }
+
+    // ── serde feature ────────────────────────────────────────────────────────
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn vmdk_info_serializes_to_json() {
+        let vmdk = test_sparse_vmdk(&[0u8; 512]);
+        let reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let info = reader.info();
+        let json = serde_json::to_string(&info).expect("serialize VmdkInfo to JSON");
+        assert!(json.contains("\"disk_type\""), "JSON must contain disk_type field");
+        assert!(json.contains("monolithicSparse"), "JSON must contain createType value");
+        let info2: VmdkInfo = serde_json::from_str(&json).expect("deserialize VmdkInfo from JSON");
+        assert_eq!(info2.disk_type, info.disk_type);
+        assert_eq!(info2.virtual_disk_size, info.virtual_disk_size);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn allocated_grain_serializes_to_json() {
+        let grain = AllocatedGrain { start_lba: 128, sector_count: 8 };
+        let json = serde_json::to_string(&grain).expect("serialize AllocatedGrain");
+        assert!(json.contains("\"start_lba\""));
+        assert!(json.contains("128"));
+        let grain2: AllocatedGrain = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(grain2, grain);
     }
 
     // ── GT cache ─────────────────────────────────────────────────────────────

@@ -11,12 +11,15 @@ categories   = ["parser-implementations", "filesystem"]
 
 [features]
 test-helpers = []
+serde = ["dep:serde"]
 
 [dependencies]
 thiserror = "2"
 flate2    = "1"
+serde     = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
+serde_json = "1"
 tempfile  = "3"
 proptest  = "1"
 

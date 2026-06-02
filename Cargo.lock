@@ -489,6 +489,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
 dependencies = [
  "serde_core",
+ "serde_derive",
 ]
 
 [[package]]
@@ -606,17 +607,19 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "vmdk"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "flate2",
  "proptest",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
 ]
 
 [[package]]
 name = "vmdk-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "vmdk",
