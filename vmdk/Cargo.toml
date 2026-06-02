@@ -1,9 +1,9 @@
 [package]
 name         = "vmdk"
-version      = "0.1.0"
+version      = "0.2.0"
 edition      = "2021"
 rust-version = "1.85"
-description  = "Pure-Rust read-only VMware VMDK sparse disk image reader"
+description  = "Pure-Rust read-only VMware VMDK disk image reader (monolithicSparse, streamOptimized, twoGbMaxExtentFlat/Sparse, monolithicFlat)"
 license      = "MIT"
 authors      = ["Albert Hui"]
 keywords     = ["forensics", "vmdk", "disk-image", "vmware", "container"]

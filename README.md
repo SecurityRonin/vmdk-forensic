@@ -113,7 +113,7 @@ Virtual offset resolution is O(1): one GD lookup (in-memory `Vec<u32>`) + one GT
 
 ## Testing
 
-- **54 tests** across 3 suites (unit, integration real-images, integration synthetic)
+- **59 tests** across unit, integration real-images, and integration synthetic suites
 - Validated against real VMware-generated images from the [dfvfs](https://github.com/log2timeline/dfvfs)
   and [plaso](https://github.com/log2timeline/plaso) forensics test corpora
 - External validation against pWnOS v2.0 (VulnHub, VMware Workstation 7, 40 GiB sparse image)

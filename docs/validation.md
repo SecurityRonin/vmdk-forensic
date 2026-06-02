@@ -94,7 +94,7 @@ without attempting DEFLATE decompression.
 relative to the descriptor path, and streams raw bytes through `MultiExtentReader`.
 `open(Cursor::new(...))` on the descriptor alone returns `Err` (no binary header).
 
-### 6. ms3-win.vmdk — twoGbMaxExtentSparse (unsupported, negative test)
+### 6. ms3-win.vmdk — twoGbMaxExtentSparse (missing extents, negative test)
 
 | Property | Value |
 |----------|-------|
@@ -104,9 +104,71 @@ relative to the descriptor path, and streams raw bytes through `MultiExtentReade
 | Creator | VMware Workstation 13 (Packer `vmware-iso` provider — genuine VMware output) |
 | File committed | Descriptor only (1 KB); 16 × SPARSE extent files (~60 GB total) not committed |
 
-`open_path("ms3-win.vmdk")` returns `Err(UnsupportedDiskType("twoGbMaxExtentSparse"))`.
-Validates that descriptors with only SPARSE extents are loudly rejected rather than
-silently succeeding with `virtual_disk_size = 0`.
+`open_path("ms3-win.vmdk")` returns `Err(Io(NotFound))` for the first missing extent
+file (`disk-s001.vmdk`). Validates that a `twoGbMaxExtentSparse` VMDK with absent
+extent files fails loudly rather than silently succeeding with `virtual_disk_size = 0`.
+
+### 7. mono_flat.vmdk + mono_flat-flat.vmdk — monolithicFlat
+
+| Property | Value |
+|----------|-------|
+| Source | Generated locally |
+| Command | `qemu-img create -f vmdk -o subformat=monolithicFlat vmdk/tests/data/mono_flat.vmdk 1M` |
+| Subformat | `monolithicFlat` |
+| Descriptor | `mono_flat.vmdk` (345 bytes, text only) |
+| Extent | `mono_flat-flat.vmdk` (1 MiB, raw zeros) |
+| Virtual size | 1 MiB (1,048,576 bytes) |
+
+**Full virtual disk MD5 (qemu-img reference):** `b6d81b360a5672d80c27430f39153e2c`
+
+Same raw content as `minimal.vmdk` — confirms `MultiExtentReader` produces identical
+output to the sparse GD/GT path for an all-zero virtual disk.
+
+### 8. tw_sparse.vmdk + tw_sparse-s001.vmdk — twoGbMaxExtentSparse (all-sparse)
+
+| Property | Value |
+|----------|-------|
+| Source | Generated locally |
+| Command | `qemu-img create -f vmdk -o subformat=twoGbMaxExtentSparse vmdk/tests/data/tw_sparse.vmdk 4M` |
+| Subformat | `twoGbMaxExtentSparse` |
+| Descriptor | `tw_sparse.vmdk` (351 bytes, text only) |
+| Extent | `tw_sparse-s001.vmdk` (64 KiB, sparse) |
+| Virtual size | 4 MiB (4,194,304 bytes) |
+
+**Full virtual disk MD5 (qemu-img reference):** `b5cfa9d6c8febd618f91ac2843d50a1c`
+
+Validates `MultiSparseReader` opens a `twoGbMaxExtentSparse` VMDK and returns zeros
+for all-sparse grains.
+
+### 9. tw_sparse_data.vmdk + tw_sparse_data-s001.vmdk — twoGbMaxExtentSparse (real data)
+
+| Property | Value |
+|----------|-------|
+| Source | Generated locally |
+| Command | See Reproducing section |
+| Subformat | `twoGbMaxExtentSparse` |
+| Virtual size | 4 MiB (4,194,304 bytes) |
+| Content | Pattern `bytes(i % 256 for i in range(4 MiB))`; first 16 bytes = `[0, 1, …, 15]` |
+
+**Full virtual disk MD5 (qemu-img reference):** `631b2c76267e568ccb221193ab23e134`
+
+Exercises the `MultiSparseReader` GD/GT/GTE lookup path with non-zero grain data.
+
+### 10. compressed_stream_opt.vmdk — streamOptimized, compressed grain
+
+| Property | Value |
+|----------|-------|
+| Source | Generated locally |
+| Command | See Reproducing section |
+| Subformat | `streamOptimized` (header version 3, `compress_algorithm = 1`) |
+| Virtual size | 64 KiB (65,536 bytes) |
+| Content | Pattern `bytes(i % 64 for i in range(64 KiB))`; first 16 bytes = `[0, 1, …, 15]` |
+| Grain marker | GTE[0]=128 → `GrainMarker` at byte 65536; `dataSize=280` (zlib payload) |
+
+**Full virtual disk MD5 (qemu-img reference):** `6d65b48626512190ba3ff86150cb9bad`
+
+Validates RFC 1950 zlib decompression of a real allocated grain (`ZlibDecoder`).
+The 280-byte compressed payload expands to 65,536 bytes matching the source pattern.
 
 ## Test Results
 
@@ -157,26 +219,48 @@ Descriptor-only test committed as `ms3-win.vmdk` (see corpus file 6 above).
 | VMware Workstation 4 origin | Yes | `dfvfs_ext2.vmdk`, `plaso_image.vmdk` |
 | VMware Workstation 7 origin | External | pWnOS v2.0 |
 | VMware Workstation 13 origin | External | Metasploitable3 descriptor |
-| Sparse grains (GTE=0 → zeros) | Yes | all monolithicSparse images |
+| Sparse grains (GTE=0 → zeros) | Yes | all monolithicSparse and streamOptimized images |
 | GTE=1 (explicitly zeroed) | Unit test | handled in `grain_location` |
-| Allocated grains (real data) | Yes | `dfvfs_ext2.vmdk`, `plaso_image.vmdk` |
+| Allocated grains (real data) | Yes | `dfvfs_ext2.vmdk`, `plaso_image.vmdk`, `tw_sparse_data.vmdk` |
 | `streamOptimized` v3 (all-sparse) | Yes | `stream_opt.vmdk` |
+| `streamOptimized` v3 (compressed grains) | Yes | `compressed_stream_opt.vmdk` |
 | `twoGbMaxExtentFlat` | Yes | `flat.vmdk` + `flat-f001.vmdk` |
-| `twoGbMaxExtentSparse` | Negative only | `ms3-win.vmdk` → `Err` |
+| `monolithicFlat` | Yes | `mono_flat.vmdk` + `mono_flat-flat.vmdk` |
+| `twoGbMaxExtentSparse` (all-sparse) | Yes | `tw_sparse.vmdk` + `tw_sparse-s001.vmdk` |
+| `twoGbMaxExtentSparse` (real data) | Yes | `tw_sparse_data.vmdk` + `tw_sparse_data-s001.vmdk` |
+| `twoGbMaxExtentSparse` (missing extents) | Yes (Err) | `ms3-win.vmdk` → `Err(Io(NotFound))` |
+| GD_AT_END sentinel (footer lookup) | Unit test | `gd_at_end_stream_opt_vmdk()` in testutil |
+| Compressed grains (RFC 1950 zlib) | Yes | `compressed_stream_opt.vmdk` |
 | `adapterType = lsilogic` | External | pWnOS v2.0 |
 | GD at non-trivial sector | External | pWnOS (sector 5151), Metasploitable3 (sector 510) |
-| Compressed grains (DEFLATE) | No | out of scope |
 
 ## Reproducing
 
 ```sh
-# Regenerate qemu-img corpus files
+# Regenerate all qemu-img corpus files
 qemu-img create -f vmdk vmdk/tests/data/minimal.vmdk 1M
 qemu-img create -f vmdk -o subformat=streamOptimized vmdk/tests/data/stream_opt.vmdk 1M
 qemu-img create -f vmdk -o subformat=twoGbMaxExtentFlat vmdk/tests/data/flat.vmdk 1M
+qemu-img create -f vmdk -o subformat=monolithicFlat vmdk/tests/data/mono_flat.vmdk 1M
+qemu-img create -f vmdk -o subformat=twoGbMaxExtentSparse vmdk/tests/data/tw_sparse.vmdk 4M
+
+# twoGbMaxExtentSparse with real pattern data (4 MiB, bytes i%256)
+python3 -c "import sys; sys.stdout.buffer.write(bytes(i%256 for i in range(4*1024*1024)))" \
+  > /tmp/pat4m.raw
+qemu-img convert -f raw -O vmdk -o subformat=twoGbMaxExtentSparse \
+  /tmp/pat4m.raw vmdk/tests/data/tw_sparse_data.vmdk
+rm /tmp/pat4m.raw
+
+# streamOptimized with compressed grain (64 KiB, bytes i%64)
+python3 -c "import sys; sys.stdout.buffer.write(bytes(i%64 for i in range(65536)))" \
+  > /tmp/pat64k.raw
+qemu-img convert -f raw -O vmdk -o subformat=streamOptimized \
+  /tmp/pat64k.raw vmdk/tests/data/compressed_stream_opt.vmdk
+rm /tmp/pat64k.raw
 
 # Compute reference MD5s
-for f in dfvfs_ext2 minimal stream_opt plaso_image; do
+for f in dfvfs_ext2 minimal stream_opt plaso_image mono_flat \
+          tw_sparse tw_sparse_data compressed_stream_opt; do
   qemu-img convert -O raw vmdk/tests/data/$f.vmdk /tmp/ref_$f.raw
   printf "%s  %s\n" "$(md5 -q /tmp/ref_$f.raw)" "$f.vmdk"
   rm /tmp/ref_$f.raw
