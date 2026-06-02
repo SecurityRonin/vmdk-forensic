@@ -38,6 +38,19 @@ impl<T: Read + Seek> ReadSeek for T {}
 /// multi-file flat extents that cannot be opened from a single stream.
 pub type VmdkFileReader = VmdkReader<Box<dyn ReadSeek + Send>>;
 
+/// SHA-256 and MD5 hash of the full virtual disk contents.
+///
+/// Produced by [`VmdkReader::hash`]. Both digests are computed in a single
+/// sequential pass over the virtual disk.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct VmdkDigest {
+    /// SHA-256 digest (32 bytes), hex-encoded.
+    pub sha256: String,
+    /// MD5 digest (16 bytes), hex-encoded.
+    pub md5: String,
+}
+
 /// A contiguous range of allocated (non-sparse) sectors in a VMDK virtual disk.
 ///
 /// Returned by [`VmdkReader::iter_allocated_grains`].
@@ -391,6 +404,14 @@ impl<R: Read + Seek> VmdkReader<R> {
             }
         }
         Ok(result)
+    }
+
+    /// Compute SHA-256 and MD5 digests of the full virtual disk in one sequential pass.
+    ///
+    /// Reads from the current seek position (normally the caller should seek to 0 first).
+    /// Uses a 64 KiB streaming buffer to avoid loading the whole disk into memory.
+    pub fn hash(&mut self) -> io::Result<VmdkDigest> {
+        todo!("hash not yet implemented")
     }
 
     /// Number of grain tables currently held in the GT cache.
@@ -790,6 +811,40 @@ mod tests {
             bytes.extend_from_slice(&suffix);
             let _ = VmdkReader::open(Cursor::new(bytes));
         }
+    }
+
+    // ── VmdkHasher ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn hash_all_zeros_disk_produces_known_sha256() {
+        // All-sparse VMDK reads as all zeros — SHA-256 of 1 MiB of zeros is a known constant.
+        use std::io::Cursor;
+        let vmdk = gd_at_end_stream_opt_vmdk();
+        let mut reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        reader.seek(SeekFrom::Start(0)).expect("seek");
+        let digest = reader.hash().expect("hash");
+        // SHA-256 of 1 MiB (1_048_576) zero bytes (computed independently):
+        // echo -n | dd bs=1 count=0 | ... — computed via sha256sum
+        assert_eq!(
+            digest.sha256,
+            "30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58",
+            "SHA-256 of 1 MiB all-zeros"
+        );
+        assert_eq!(
+            digest.md5,
+            "b6d81b360a5672d80c27430f39153e2c",
+            "MD5 of 1 MiB all-zeros (matches qemu-img reference)"
+        );
+    }
+
+    #[test]
+    fn hash_produces_hex_strings_of_correct_length() {
+        let vmdk = test_sparse_vmdk(&[0u8; 512]);
+        let mut reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        reader.seek(SeekFrom::Start(0)).expect("seek");
+        let digest = reader.hash().expect("hash");
+        assert_eq!(digest.sha256.len(), 64, "SHA-256 hex must be 64 chars");
+        assert_eq!(digest.md5.len(), 32, "MD5 hex must be 32 chars");
     }
 
     // ── serde feature ────────────────────────────────────────────────────────
