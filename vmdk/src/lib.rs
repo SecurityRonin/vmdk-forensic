@@ -2,7 +2,7 @@
 //!
 //! Supports monolithic sparse (`monolithicSparse`), stream-optimised
 //! (`streamOptimized`, sparse-grain read), and flat-extent VMDKs
-//! (`twoGbMaxExtentFlat`, `monolithicFlat`).
+//! (`twoGbMaxExtentFlat`).
 
 use std::fs::File;
 use std::io::{self, BufReader, Read, Seek, SeekFrom};
@@ -260,6 +260,16 @@ impl VmdkFileReader {
             // twoGbMaxExtentSparse). Returning Ok with 0 bytes would silently
             // mislead callers into thinking the disk is empty.
             if desc.extents.is_empty() && !desc.create_type.is_empty() {
+                return Err(VmdkError::UnsupportedDiskType(
+                    desc.create_type.into_string(),
+                ));
+            }
+
+            // Allowlist: only twoGbMaxExtentFlat has been validated against
+            // real VMware output. Reject other flat createTypes (e.g.
+            // monolithicFlat) explicitly rather than opening them with
+            // unverified behaviour.
+            if desc.create_type.as_ref() != "twoGbMaxExtentFlat" {
                 return Err(VmdkError::UnsupportedDiskType(
                     desc.create_type.into_string(),
                 ));
