@@ -109,6 +109,66 @@ fn write_stream_opt_hdr(h: &mut [u8; 512], gd_off: u64) {
     h[77..79].copy_from_slice(&1u16.to_le_bytes()); // compressAlgorithm = 1
 }
 
+// ── streamOptimized with crafted GrainMarker (fuzz-defense helper) ───────────
+// Layout:
+// Sector 0    : v3 header (compress=1, capacity=128, grain_size=128, gd_offset=26)
+//               descriptor_offset=0 (no embedded descriptor)
+// Sector 26   : GD[0] = 27
+// Sector 27   : GT[0] = 128
+// Sector 128  : GrainMarker { lba=0 (8 B), data_size (4 B) }  — no payload follows
+const COM_CAPACITY: u64 = 128;    // virtual disk sectors (64 KiB)
+const COM_GRAIN_SIZE: u64 = 128;  // grain_size sectors   (64 KiB)
+const COM_NUM_GTES: u32 = 512;
+const COM_GD_SECTOR: u64 = 26;
+const COM_GT_SECTOR: u64 = 27;
+const COM_GRAIN_SECTOR: u64 = 128;
+const COM_MARKER_BYTES: usize = 12; // 8-byte LBA + 4-byte dataSize
+
+/// Build a streamOptimized VMDK with GTE[0] pointing to a `GrainMarker` whose
+/// `data_size` field is set to `marker_data_size`.
+///
+/// No compressed payload is present after the 12-byte marker.  Any attempt to
+/// read `marker_data_size` bytes will hit EOF — the cap check must fire first.
+#[cfg_attr(not(any(test, feature = "test-helpers")), allow(dead_code))]
+pub fn compressed_vmdk_with_oversized_marker(marker_data_size: u32) -> Vec<u8> {
+    let total = COM_GRAIN_SECTOR as usize * SECTOR_SIZE as usize + COM_MARKER_BYTES;
+    let mut vmdk = vec![0u8; total];
+
+    // Sector 0: streamOptimized header.
+    {
+        let h = &mut vmdk[0..512];
+        h[0..4].copy_from_slice(&MAGIC.to_le_bytes());
+        h[4..8].copy_from_slice(&VERSION_STREAM_OPT.to_le_bytes());
+        h[12..20].copy_from_slice(&COM_CAPACITY.to_le_bytes());
+        h[20..28].copy_from_slice(&COM_GRAIN_SIZE.to_le_bytes());
+        // descriptor_offset = 0, descriptor_size = 0 (leave as zeros)
+        h[44..48].copy_from_slice(&COM_NUM_GTES.to_le_bytes());
+        // rgd_offset = 0
+        h[56..64].copy_from_slice(&COM_GD_SECTOR.to_le_bytes()); // gd_offset = 26
+        h[64..72].copy_from_slice(&COM_GRAIN_SECTOR.to_le_bytes()); // overHead
+        h[73] = b'\n';
+        h[74] = b' ';
+        h[75] = b'\r';
+        h[76] = b'\n';
+        h[77..79].copy_from_slice(&1u16.to_le_bytes()); // compress_algorithm = 1
+    }
+
+    // Sector 26: GD[0] → GT at sector 27.
+    let gd = COM_GD_SECTOR as usize * SECTOR_SIZE as usize;
+    vmdk[gd..gd + 4].copy_from_slice(&(COM_GT_SECTOR as u32).to_le_bytes());
+
+    // Sector 27: GT[0] → grain at sector 128.
+    let gt = COM_GT_SECTOR as usize * SECTOR_SIZE as usize;
+    vmdk[gt..gt + 4].copy_from_slice(&(COM_GRAIN_SECTOR as u32).to_le_bytes());
+
+    // Sector 128: GrainMarker — lba=0, data_size=<param>.
+    let marker = COM_GRAIN_SECTOR as usize * SECTOR_SIZE as usize;
+    // lba bytes 0–7 already zero
+    vmdk[marker + 8..marker + 12].copy_from_slice(&marker_data_size.to_le_bytes());
+
+    vmdk
+}
+
 /// Build a streamOptimized VMDK where the primary header carries `GD_AT_END`
 /// (`gdOffset = u64::MAX`) and the real GD is referenced by the footer header
 /// pinned at `file_end − 1024`.

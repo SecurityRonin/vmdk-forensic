@@ -453,7 +453,10 @@ mod testutil;
 mod tests {
     use super::*;
     use std::io::Cursor;
-    use testutil::{gd_at_end_stream_opt_vmdk, test_sparse_vmdk, GRAIN_SIZE_BYTES};
+    use testutil::{
+        compressed_vmdk_with_oversized_marker, gd_at_end_stream_opt_vmdk, test_sparse_vmdk,
+        GRAIN_SIZE_BYTES,
+    };
 
     fn vmdk_header_bytes(capacity_sectors: u64, grain_size: u64, num_gtes_per_gt: u32) -> Vec<u8> {
         let mut h = vec![0u8; 512];
@@ -560,6 +563,50 @@ mod tests {
             let mut bytes = vec![0u8; 8];
             bytes[0..4].copy_from_slice(&0x564D_444B_u32.to_le_bytes());
             bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
+            bytes.extend_from_slice(&suffix);
+            let _ = VmdkReader::open(Cursor::new(bytes));
+        }
+    }
+
+    // ── Fuzz / malicious-input defence ───────────────────────────────────────
+
+    #[test]
+    fn compressed_grain_oversized_data_size_returns_invaliddata() {
+        let vmdk = compressed_vmdk_with_oversized_marker(4 * 1024 * 1024);
+        let mut reader = VmdkReader::open(Cursor::new(vmdk))
+            .expect("VMDK with oversized marker must open — error only on read");
+        let mut buf = [0u8; 512];
+        let err = reader.read(&mut buf).expect_err("oversized data_size must return Err");
+        assert_eq!(
+            err.kind(),
+            io::ErrorKind::InvalidData,
+            "must return InvalidData from cap check, not UnexpectedEof from allocation attempt"
+        );
+    }
+
+    #[test]
+    fn grain_size_below_spec_minimum_is_rejected() {
+        let mut hdr = vec![0u8; 512];
+        hdr[0..4].copy_from_slice(&0x564D_444B_u32.to_le_bytes());
+        hdr[4..8].copy_from_slice(&1u32.to_le_bytes());
+        hdr[12..20].copy_from_slice(&128u64.to_le_bytes()); // capacity = 128 sectors
+        hdr[20..28].copy_from_slice(&4u64.to_le_bytes()); // grain_size = 4 (below VDF 1.1 minimum of 8)
+        hdr[44..48].copy_from_slice(&512u32.to_le_bytes()); // num_gtes_per_gt
+        let result = VmdkReader::open(Cursor::new(hdr));
+        assert!(
+            result.is_err(),
+            "grain_size=4 is below VDF 1.1 minimum of 8 sectors; open must return Err"
+        );
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn open_never_panics_on_stream_opt_magic_plus_garbage(
+            suffix in proptest::collection::vec(proptest::prelude::any::<u8>(), 0..8192)
+        ) {
+            let mut bytes = vec![0u8; 8];
+            bytes[0..4].copy_from_slice(&0x564D_444B_u32.to_le_bytes());
+            bytes[4..8].copy_from_slice(&3u32.to_le_bytes()); // version = 3 (streamOptimized path)
             bytes.extend_from_slice(&suffix);
             let _ = VmdkReader::open(Cursor::new(bytes));
         }
