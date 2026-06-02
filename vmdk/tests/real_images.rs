@@ -256,3 +256,54 @@ fn flat_f001_vmdk_returns_err() {
         "flat extent data (zero magic) must be rejected with Err, not panic"
     );
 }
+
+// ── monolithicFlat (not yet validated) ───────────────────────────────────────
+//
+// monolithicFlat uses identical FLAT extent syntax to twoGbMaxExtentFlat but
+// has never been tested against real VMware output.  open_path must reject it
+// with UnsupportedDiskType rather than accidentally opening it with
+// unvalidated behaviour.
+
+#[test]
+fn monolithic_flat_open_path_returns_err() {
+    // Synthetic descriptor: createType="monolithicFlat", one FLAT extent
+    // pointing at the committed flat-f001.vmdk (which exists on disk).
+    // Absolute path in the descriptor is valid — Path::join replaces the base
+    // when the component is absolute, so MultiExtentReader would find the file.
+    let desc = format!(
+        "# Disk DescriptorFile\nversion=1\nCID=aabbccdd\nparentCID=ffffffff\n\
+         createType=\"monolithicFlat\"\n\n# Extent description\n\
+         RW 2048 FLAT \"{DATA_DIR}/flat-f001.vmdk\" 0\n"
+    );
+    let tmp = tempfile::NamedTempFile::new().expect("NamedTempFile");
+    std::fs::write(tmp.path(), desc.as_bytes()).expect("write descriptor");
+    let result = vmdk::VmdkReader::open_path(tmp.path());
+    assert!(
+        result.is_err(),
+        "monolithicFlat is not yet validated; open_path must return Err, got Ok"
+    );
+}
+
+// ── streamOptimized: allocated compressed grain must return Err ───────────────
+//
+// stream_opt.vmdk is all-sparse (GTE[0]=0).  Patching GTE[0] to 128 simulates
+// an allocated grain in a v3 compressed VMDK.  The reader must return Err
+// rather than attempting DEFLATE decompression or returning garbled bytes.
+//
+// Layout (verified empirically): GD at sector 26 (byte 13312), GD[0]=27,
+// GT at sector 27 (byte 13824), GTE[0] at byte 13824.
+
+#[test]
+fn stream_opt_compressed_allocated_grain_read_returns_err() {
+    let mut data = read_fixture("stream_opt.vmdk");
+    // Patch GTE[0] from 0 (sparse) to 128 (allocated grain at sector 128).
+    data[13824..13828].copy_from_slice(&128u32.to_le_bytes());
+    let mut reader =
+        vmdk::VmdkReader::open(Cursor::new(data)).expect("open patched streamOptimized VMDK");
+    let mut buf = [0u8; 512];
+    let result = reader.read_exact(&mut buf);
+    assert!(
+        result.is_err(),
+        "reading an allocated grain in a compressed (v3) VMDK must return Err"
+    );
+}
