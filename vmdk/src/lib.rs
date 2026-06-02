@@ -11,6 +11,7 @@ use std::io::{self, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
 mod chain;
+mod cowd;
 mod descriptor;
 pub(crate) mod error;
 mod flat;
@@ -739,8 +740,8 @@ mod tests {
     use super::*;
     use std::io::Cursor;
     use testutil::{
-        compressed_vmdk_with_oversized_marker, gd_at_end_stream_opt_vmdk, test_sparse_vmdk,
-        GRAIN_SIZE_BYTES,
+        compressed_vmdk_with_oversized_marker, gd_at_end_stream_opt_vmdk, test_cowd_vmdk,
+        test_sparse_vmdk, GRAIN_SIZE_BYTES,
     };
 
     fn vmdk_header_bytes(capacity_sectors: u64, grain_size: u64, num_gtes_per_gt: u32) -> Vec<u8> {
@@ -851,6 +852,36 @@ mod tests {
             bytes.extend_from_slice(&suffix);
             let _ = VmdkReader::open(Cursor::new(bytes));
         }
+    }
+
+    // ── COWD format (vmfsSparse / vmfsThin) ──────────────────────────────────
+
+    #[test]
+    fn cowd_vmdk_opens_without_bad_magic_error() {
+        let cowd = test_cowd_vmdk(&[0u8; 512]);
+        let reader = VmdkReader::open(Cursor::new(cowd));
+        assert!(reader.is_ok(), "COWD VMDK must open successfully, got: {:?}", reader.err());
+    }
+
+    #[test]
+    fn cowd_vmdk_reads_grain_data() {
+        let mut data = vec![0u8; 512];
+        data[0] = 0xC0;
+        data[1] = 0xBE;
+        let cowd = test_cowd_vmdk(&data);
+        let mut reader = VmdkReader::open(Cursor::new(cowd)).expect("open COWD");
+        let mut buf = [0u8; 512];
+        reader.read_exact(&mut buf).expect("read");
+        assert_eq!(buf[0], 0xC0, "COWD grain data byte 0");
+        assert_eq!(buf[1], 0xBE, "COWD grain data byte 1");
+    }
+
+    #[test]
+    fn cowd_vmdk_virtual_disk_size() {
+        let cowd = test_cowd_vmdk(&[0u8; 512]);
+        let reader = VmdkReader::open(Cursor::new(cowd)).expect("open");
+        // test_cowd_vmdk capacity = grain_size = 8 sectors = 4096 bytes
+        assert_eq!(reader.virtual_disk_size(), 8 * 512);
     }
 
     // ── VmdkHasher ───────────────────────────────────────────────────────────

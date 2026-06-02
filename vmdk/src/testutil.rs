@@ -154,6 +154,57 @@ pub fn write_chain_to_dir(
     (base_path, delta_path)
 }
 
+// ── COWD test helpers ─────────────────────────────────────────────────────────
+
+/// Build a minimal COWD extent file with grain 0 containing `sector_data`.
+///
+/// Layout: header (sector 0) | padding (sectors 1-3) | GD (sector 4) | GT (sector 5) | grain
+#[cfg_attr(not(any(test, feature = "test-helpers")), allow(dead_code))]
+pub fn test_cowd_vmdk(sector_data: &[u8]) -> Vec<u8> {
+    const COWD_MAGIC: u32 = 0x434F_5744;
+    const GRAIN_SIZE: u32 = 8; // 4 KiB grains
+    const GTES_PER_GT: u32 = 4096;
+    const GD_SECTOR: u32 = 4;
+    const GT_SECTOR: u32 = 5;
+    // Grain data starts at sector 5 + ceil(GTES_PER_GT*4/512) = 5 + 32 = 37
+    const GRAIN_SECTOR: u32 = GT_SECTOR + GTES_PER_GT * 4 / 512; // = 37
+
+    let grain_size_bytes = GRAIN_SIZE as usize * SECTOR_SIZE as usize;
+    let mut grain = vec![0u8; grain_size_bytes];
+    let copy_len = sector_data.len().min(grain_size_bytes);
+    grain[..copy_len].copy_from_slice(&sector_data[..copy_len]);
+
+    // Header: 512 bytes
+    let mut hdr = vec![0u8; 512];
+    hdr[0..4].copy_from_slice(&COWD_MAGIC.to_be_bytes()); // big-endian magic
+    hdr[4..8].copy_from_slice(&1u32.to_le_bytes()); // version = 1
+    hdr[8..12].copy_from_slice(&3u32.to_le_bytes()); // flags
+    hdr[12..16].copy_from_slice(&GRAIN_SIZE.to_le_bytes()); // capacity = 1 grain
+    hdr[16..20].copy_from_slice(&GRAIN_SIZE.to_le_bytes()); // grain_size
+    hdr[20..24].copy_from_slice(&GD_SECTOR.to_le_bytes()); // GD sector
+    hdr[24..28].copy_from_slice(&1u32.to_le_bytes()); // gd_entries = 1
+    hdr[28..32].copy_from_slice(&(GRAIN_SECTOR + GRAIN_SIZE).to_le_bytes()); // next_free
+
+    // Sectors 1-3: padding
+    let padding = vec![0u8; 3 * SECTOR_SIZE as usize];
+
+    // Sector 4: GD — one entry pointing to GT at sector 5
+    let mut gd = vec![0u8; SECTOR_SIZE as usize];
+    gd[0..4].copy_from_slice(&GT_SECTOR.to_le_bytes());
+
+    // Sectors 5-36: GT (4096 × 4 bytes = 16384 bytes = 32 sectors), GTE[0] → grain
+    let mut gt = vec![0u8; GTES_PER_GT as usize * 4];
+    gt[0..4].copy_from_slice(&GRAIN_SECTOR.to_le_bytes());
+
+    let mut cowd = Vec::new();
+    cowd.extend_from_slice(&hdr);
+    cowd.extend_from_slice(&padding);
+    cowd.extend_from_slice(&gd);
+    cowd.extend_from_slice(&gt);
+    cowd.extend_from_slice(&grain);
+    cowd
+}
+
 // ── streamOptimized GD_AT_END layout constants ────────────────────────────────
 // Sector 0       : primary header (gdOffset = u64::MAX sentinel)
 // Sectors 1–20   : descriptor (createType="streamOptimized")
