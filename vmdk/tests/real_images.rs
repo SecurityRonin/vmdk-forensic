@@ -203,6 +203,37 @@ fn plaso_image_vmdk_has_real_data_at_offset_1024() {
     );
 }
 
+// ── ms3-win.vmdk (Metasploitable3 Windows 2008, twoGbMaxExtentSparse) ────────
+//
+// Descriptor-only file (1 KB) from the Rapid7 Metasploitable3 VMware Vagrant
+// box (virtualHWVersion=13, built with Packer vmware-iso). References 16 ×
+// disk-sNNN.vmdk SPARSE extents which are not committed (total ~60 GB).
+// Source: vagrantcloud.com/rapid7/metasploitable3-win2k8, vmware_desktop provider.
+//
+// open()      → Err (text descriptor, no VMDK binary header / BadMagic)
+// open_path() → Err (twoGbMaxExtentSparse has only SPARSE extents; must not
+//               silently succeed with virtual_disk_size = 0)
+
+#[test]
+fn ms3_win_descriptor_open_returns_err() {
+    let data = read_fixture("ms3-win.vmdk");
+    let result = vmdk::VmdkReader::open(Cursor::new(data));
+    assert!(
+        result.is_err(),
+        "twoGbMaxExtentSparse text descriptor opened via open() must return Err"
+    );
+}
+
+#[test]
+fn ms3_win_two_gb_max_extent_sparse_open_path_returns_err() {
+    let path = format!("{DATA_DIR}/ms3-win.vmdk");
+    let result = vmdk::VmdkReader::open_path(std::path::Path::new(&path));
+    assert!(
+        result.is_err(),
+        "twoGbMaxExtentSparse (SPARSE extents not supported) must return Err, not Ok with 0 bytes"
+    );
+}
+
 #[test]
 fn flat_vmdk_descriptor_returns_err() {
     let data = read_fixture("flat.vmdk");
