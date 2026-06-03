@@ -68,6 +68,28 @@ pub struct AllocatedGrain {
     pub sector_count: u64,
 }
 
+/// Result of a structural integrity walk ([`VmdkReader::check_integrity`]).
+///
+/// Counts grain-directory / grain-table pointers that fall outside the backing file —
+/// the signature of a truncated or tampered image. `is_ok()` is the headline verdict.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct IntegrityReport {
+    /// Number of allocated grains examined.
+    pub grains_checked: u64,
+    /// Allocated grains whose data offset lies beyond end-of-file.
+    pub out_of_bounds_grains: u64,
+    /// Grain-directory entries whose grain table lies beyond end-of-file.
+    pub out_of_bounds_grain_tables: u64,
+}
+
+impl IntegrityReport {
+    /// `true` when no dangling pointers were found.
+    pub fn is_ok(&self) -> bool {
+        self.out_of_bounds_grains == 0 && self.out_of_bounds_grain_tables == 0
+    }
+}
+
 /// Structured metadata for a VMDK virtual disk.
 ///
 /// Returned by [`VmdkReader::info`].  All fields are `Clone`-able so callers
@@ -347,6 +369,101 @@ impl<R: Read + Seek> VmdkReader<R> {
             .map(|c| u32::from_le_bytes(c.try_into().expect("4 bytes")))
             .collect();
         Ok(primary_gd == rgd)
+    }
+
+    /// Walk the grain directory and tables, counting pointers that fall beyond
+    /// end-of-file (the signature of a truncated or tampered image).
+    ///
+    /// Flat extents have no grain metadata (bounds are enforced at open), so they
+    /// always report clean. seSparse and COWD share the sparse walk via their
+    /// in-memory grain directory.
+    pub fn check_integrity(&mut self) -> io::Result<IntegrityReport> {
+        let file_len = self.inner.seek(SeekFrom::End(0))?;
+        let mut report = IntegrityReport::default();
+
+        match &self.fmt {
+            FormatState::Flat => return Ok(report),
+            FormatState::Sparse {
+                grain_dir,
+                grain_size_bytes,
+                num_gtes_per_gt,
+                ..
+            } => {
+                let grain_dir = grain_dir.clone();
+                let grain_size_bytes = *grain_size_bytes;
+                let num_gtes_per_gt = *num_gtes_per_gt;
+                let gt_byte_len = num_gtes_per_gt * 4;
+                for &gt_sector in &grain_dir {
+                    if gt_sector == 0 {
+                        continue;
+                    }
+                    let gt_byte = u64::from(gt_sector) * SECTOR_SIZE;
+                    if gt_byte.saturating_add(gt_byte_len) > file_len {
+                        report.out_of_bounds_grain_tables += 1;
+                        continue;
+                    }
+                    self.inner.seek(SeekFrom::Start(gt_byte))?;
+                    let mut gt = vec![0u8; gt_byte_len as usize];
+                    self.inner.read_exact(&mut gt)?;
+                    for c in gt.chunks_exact(4) {
+                        let gte = u32::from_le_bytes(c.try_into().expect("4 bytes"));
+                        if gte <= 1 {
+                            continue; // sparse / explicitly-zeroed
+                        }
+                        report.grains_checked += 1;
+                        let grain_byte = u64::from(gte) * SECTOR_SIZE;
+                        if grain_byte.saturating_add(grain_size_bytes) > file_len {
+                            report.out_of_bounds_grains += 1;
+                        }
+                    }
+                }
+            }
+            FormatState::SeSparse {
+                grain_dir,
+                grain_size_bytes,
+                gt_offset_sectors,
+                grains_offset_sectors,
+            } => {
+                let grain_dir = grain_dir.clone();
+                let grain_size_bytes = *grain_size_bytes;
+                let grain_sectors = grain_size_bytes / SECTOR_SIZE;
+                let gt_off = *gt_offset_sectors;
+                let grains_off = *grains_offset_sectors;
+                let gt_byte_len = sesparse::SE_GTES_PER_GT * 8;
+                for &gd_entry in &grain_dir {
+                    if gd_entry == 0 {
+                        continue;
+                    }
+                    if gd_entry & sesparse::SE_GD_ALLOC_MASK != sesparse::SE_GD_ALLOC_FLAG {
+                        report.out_of_bounds_grain_tables += 1;
+                        continue;
+                    }
+                    let gt_table_idx = gd_entry & sesparse::SE_GD_INDEX_MASK;
+                    let gt_sector = gt_off + gt_table_idx * sesparse::SE_GT_SECTORS;
+                    let gt_byte = gt_sector * SECTOR_SIZE;
+                    if gt_byte.saturating_add(gt_byte_len) > file_len {
+                        report.out_of_bounds_grain_tables += 1;
+                        continue;
+                    }
+                    self.inner.seek(SeekFrom::Start(gt_byte))?;
+                    let mut gt = vec![0u8; gt_byte_len as usize];
+                    self.inner.read_exact(&mut gt)?;
+                    for c in gt.chunks_exact(8) {
+                        let gte = u64::from_le_bytes(c.try_into().expect("8 bytes"));
+                        if gte & sesparse::SE_GTE_TYPE_MASK != sesparse::SE_GTE_TYPE_ALLOCATED {
+                            continue;
+                        }
+                        report.grains_checked += 1;
+                        let grain_idx = sesparse::se_gte_grain_index(gte);
+                        let grain_byte = (grains_off + grain_idx * grain_sectors) * SECTOR_SIZE;
+                        if grain_byte.saturating_add(grain_size_bytes) > file_len {
+                            report.out_of_bounds_grains += 1;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(report)
     }
 
     /// CID from the embedded descriptor; `0xffff_ffff` when absent.

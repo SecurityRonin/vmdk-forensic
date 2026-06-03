@@ -339,6 +339,43 @@ fn verify_minimal_vmdk_exits_ok() {
     );
 }
 
+#[test]
+fn verify_reports_integrity_for_clean_image() {
+    let out = vmdk_bin()
+        .args(["verify", &data_path("dfvfs_ext2.vmdk")])
+        .output()
+        .expect("vmdk verify must run");
+    assert!(out.status.success(), "exit: {}", out.status);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Integrity"),
+        "verify must report an integrity line, got: {stdout}"
+    );
+}
+
+#[test]
+fn verify_detects_corruption_and_exits_nonzero() {
+    // Truncate a real allocated-grain image so its grain pointers dangle.
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let mut data = std::fs::read(data_path("dfvfs_ext2.vmdk")).expect("read corpus");
+    data.truncate(data.len() / 2);
+    let p = tmp.path().join("truncated.vmdk");
+    std::fs::write(&p, &data).expect("write truncated");
+    let out = vmdk_bin()
+        .args(["verify", p.to_str().unwrap()])
+        .output()
+        .expect("vmdk verify must run");
+    assert!(
+        !out.status.success(),
+        "verify must exit non-zero on a corrupted image"
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.to_uppercase().contains("FAIL") || stdout.contains("out-of-bounds"),
+        "verify must flag the corruption, got: {stdout}"
+    );
+}
+
 // ── diff ──────────────────────────────────────────────────────────────────────
 
 #[test]

@@ -416,3 +416,31 @@ fn extent_dependencies_real_monolithic_sparse_is_empty() {
         "self-contained binary VMDK has no deps, got: {deps:?}"
     );
 }
+
+// ── check_integrity against real images ──────────────────────────────────────
+
+#[test]
+fn check_integrity_real_images_are_clean() {
+    for name in ["minimal.vmdk", "dfvfs_ext2.vmdk", "plaso_image.vmdk", "stream_opt.vmdk"] {
+        let data = read_fixture(name);
+        let mut reader = vmdk::VmdkReader::open(Cursor::new(data))
+            .unwrap_or_else(|e| panic!("open {name}: {e:?}"));
+        let report = reader.check_integrity().expect("check_integrity");
+        assert!(report.is_ok(), "{name} must pass integrity: {report:?}");
+    }
+}
+
+#[test]
+fn check_integrity_detects_truncated_image() {
+    // Truncate a real allocated-grain image mid-file → grain pointers now dangle.
+    let mut data = read_fixture("dfvfs_ext2.vmdk");
+    let full_len = data.len();
+    data.truncate(full_len / 2); // chop off the second half (grain data)
+    let mut reader =
+        vmdk::VmdkReader::open(Cursor::new(data)).expect("truncated header still opens");
+    let report = reader.check_integrity().expect("check_integrity");
+    assert!(
+        !report.is_ok(),
+        "a truncated image must fail integrity: {report:?}"
+    );
+}
