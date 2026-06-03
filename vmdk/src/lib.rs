@@ -1111,14 +1111,71 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let desc = "# Disk DescriptorFile\nversion=1\nCID=ffffffff\nparentCID=ffffffff\ncreateType=\"monolithicFlat\"\nRW 2048 ZERO\n";
         let desc_path = dir.path().join("zero.vmdk");
-        std::fs::File::create(&desc_path).unwrap().write_all(desc.as_bytes()).unwrap();
-        let mut reader = VmdkFileReader::open_path(&desc_path)
-            .expect("descriptor with a ZERO extent must open");
-        assert_eq!(reader.virtual_disk_size(), 2048 * 512, "ZERO extent contributes its sector count");
+        std::fs::File::create(&desc_path)
+            .unwrap()
+            .write_all(desc.as_bytes())
+            .unwrap();
+        let mut reader =
+            VmdkFileReader::open_path(&desc_path).expect("descriptor with a ZERO extent must open");
+        assert_eq!(
+            reader.virtual_disk_size(),
+            2048 * 512,
+            "ZERO extent contributes its sector count"
+        );
         reader.seek(SeekFrom::Start(0)).unwrap();
         let mut buf = [0xFFu8; 512];
         reader.read_exact(&mut buf).expect("read");
         assert_eq!(buf, [0u8; 512], "ZERO extent must read as zeros");
+    }
+
+    // ── custom + device-passthrough createTypes ──────────────────────────────
+
+    /// Write a descriptor + a flat extent file containing `byte0` at offset 0,
+    /// then assert `open_path` reads it back through `create_type`/`extent_kw`.
+    fn assert_flat_create_type_reads(create_type: &str, extent_kw: &str, byte0: u8) {
+        use std::io::Write as _;
+        let dir = tempfile::tempdir().unwrap();
+        let mut extent = vec![0u8; 1024];
+        extent[0] = byte0;
+        let extent_path = dir.path().join("disk-flat.vmdk");
+        std::fs::File::create(&extent_path)
+            .unwrap()
+            .write_all(&extent)
+            .unwrap();
+        let offset = if extent_kw == "FLAT" { " 0" } else { "" };
+        let desc = format!(
+            "# Disk DescriptorFile\nversion=1\nCID=ffffffff\nparentCID=ffffffff\n\
+             createType=\"{create_type}\"\nRW 2 {extent_kw} \"disk-flat.vmdk\"{offset}\n"
+        );
+        let desc_path = dir.path().join("disk.vmdk");
+        std::fs::write(&desc_path, desc.as_bytes()).unwrap();
+        let mut reader = VmdkFileReader::open_path(&desc_path)
+            .unwrap_or_else(|e| panic!("{create_type}/{extent_kw} must open: {e:?}"));
+        let mut buf = [0u8; 1];
+        reader.read_exact(&mut buf).expect("read");
+        assert_eq!(buf[0], byte0, "{create_type}: must read the referenced extent");
+    }
+
+    #[test]
+    fn custom_create_type_with_flat_extent_opens() {
+        // createType="custom" is an arbitrary extent mix — route by extent composition.
+        assert_flat_create_type_reads("custom", "FLAT", 0xC0);
+    }
+
+    #[test]
+    fn full_device_create_type_routes_to_flat() {
+        // fullDevice / partitionedDevice map to a device path via a FLAT extent;
+        // when the referenced path is present they read like any flat extent.
+        assert_flat_create_type_reads("fullDevice", "FLAT", 0xFD);
+        assert_flat_create_type_reads("partitionedDevice", "FLAT", 0xDE);
+    }
+
+    #[test]
+    fn vmfs_raw_rdm_create_types_route_to_flat() {
+        // vmfsRaw / vmfsRawDeviceMap reference a raw LUN via a VMFSRAW/FLAT extent;
+        // present-path reads must succeed (offline-absent yields a clear NotFound).
+        assert_flat_create_type_reads("vmfsRaw", "VMFSRAW", 0x4A);
+        assert_flat_create_type_reads("vmfsRawDeviceMap", "VMFSRAW", 0x4B);
     }
 
     #[test]
