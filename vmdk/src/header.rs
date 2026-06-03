@@ -9,6 +9,13 @@ pub const VERSION_ZEROED_GRAIN: u32 = 2;
 pub const VERSION_STREAM_OPT: u32 = 3;
 pub const SECTOR_SIZE: u64 = 512;
 
+/// Maximum grain-table entries per grain table (VDF 1.1 §4.1: `numGTEsPerGT` = 512).
+///
+/// QEMU's `vmdk_open_vmdk4` rejects any larger value. The read path allocates
+/// `num_gtes_per_gt * 4` bytes per grain table, so this bound caps that allocation
+/// at 2 KiB and prevents a crafted header from forcing a huge allocation.
+pub const MAX_NUM_GTES_PER_GT: u32 = 512;
+
 /// Sentinel `gdOffset` in the *primary* header of a `streamOptimized` extent.
 ///
 /// When `gdOffset == GD_AT_END` the real GD location is in the *footer* header
@@ -78,6 +85,15 @@ impl SparseExtentHeader {
             return Err(VmdkError::InvalidGeometry(
                 "num_gtes_per_gt must be > 0".into(),
             ));
+        }
+        // VDF 1.1 defines numGTEsPerGT as 512; QEMU's vmdk_open_vmdk4 rejects any
+        // larger value. Enforcing it here bounds the read path's grain-table
+        // allocation (`vec![0u8; num_gtes_per_gt * 4]`) at parse time, so no caller
+        // can be driven into a multi-gigabyte allocation by a crafted header.
+        if num_gtes_per_gt > MAX_NUM_GTES_PER_GT {
+            return Err(VmdkError::InvalidGeometry(format!(
+                "num_gtes_per_gt {num_gtes_per_gt} exceeds spec maximum {MAX_NUM_GTES_PER_GT}"
+            )));
         }
 
         Ok(SparseExtentHeader {
