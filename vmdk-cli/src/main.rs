@@ -1,6 +1,6 @@
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
-use std::process;
+use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use vmdk::{VmdkChainReader, VmdkFileReader};
@@ -17,14 +17,12 @@ fn fmt_commas(n: u64) -> String {
     out.chars().rev().collect()
 }
 
-fn open_or_die(path: &std::path::Path) -> VmdkFileReader {
-    match VmdkFileReader::open_path(path) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("error: {e}");
-            process::exit(1);
-        }
-    }
+/// Open a VMDK, mapping any error to a printable message.
+///
+/// Returning `Result` (rather than calling `process::exit`) keeps every error
+/// path a normal return, so coverage counters flush and the code is exercisable.
+fn open(path: &std::path::Path) -> Result<VmdkFileReader, String> {
+    VmdkFileReader::open_path(path).map_err(|e| format!("error: {e}"))
 }
 
 #[derive(Parser)]
@@ -92,19 +90,26 @@ enum Command {
     },
 }
 
+/// Print an error message to stderr and yield a failure exit code.
+fn fail(msg: impl std::fmt::Display) -> ExitCode {
+    eprintln!("{msg}");
+    ExitCode::FAILURE
+}
+
 // ── info ──────────────────────────────────────────────────────────────────────
 
-fn cmd_info(path: &std::path::Path, descriptor: bool, chain: bool) {
+fn cmd_info(path: &std::path::Path, descriptor: bool, chain: bool) -> ExitCode {
     if descriptor {
-        print_descriptor(path);
-        return;
+        return print_descriptor(path);
     }
     if chain {
-        print_chain(path);
-        return;
+        return print_chain(path);
     }
 
-    let reader = open_or_die(path);
+    let reader = match open(path) {
+        Ok(r) => r,
+        Err(m) => return fail(m),
+    };
     let info = reader.info();
     let mib = info.virtual_disk_size as f64 / (1024.0 * 1024.0);
     let file_name = path
@@ -159,19 +164,23 @@ fn cmd_info(path: &std::path::Path, descriptor: bool, chain: bool) {
             }
         }
     }
+    ExitCode::SUCCESS
 }
 
-fn print_descriptor(path: &std::path::Path) {
-    let reader = open_or_die(path);
+fn print_descriptor(path: &std::path::Path) -> ExitCode {
+    let reader = match open(path) {
+        Ok(r) => r,
+        Err(m) => return fail(m),
+    };
     let text = reader.descriptor_text();
     if text.is_empty() {
-        eprintln!("No embedded descriptor in {}", path.display());
-        process::exit(1);
+        return fail(format!("No embedded descriptor in {}", path.display()));
     }
     print!("{text}");
+    ExitCode::SUCCESS
 }
 
-fn print_chain(path: &std::path::Path) {
+fn print_chain(path: &std::path::Path) -> ExitCode {
     match VmdkChainReader::open(path) {
         Ok(chain) => {
             println!("Chain depth:  {} layer(s)", chain.depth());
@@ -179,10 +188,11 @@ fn print_chain(path: &std::path::Path) {
                 "Virtual size: {} bytes",
                 fmt_commas(chain.virtual_disk_size())
             );
+            ExitCode::SUCCESS
         }
         Err(e) => {
             // Fall back to single-image view, reporting parentCID if present.
-            match VmdkFileReader::open_path(path) {
+            match open(path) {
                 Ok(r) => {
                     let info = r.info();
                     println!("Chain depth:  1 layer");
@@ -195,11 +205,9 @@ fn print_chain(path: &std::path::Path) {
                     } else {
                         println!("No parent (base image)");
                     }
+                    ExitCode::SUCCESS
                 }
-                Err(e2) => {
-                    eprintln!("error: {e2}");
-                    process::exit(1);
-                }
+                Err(m) => fail(m),
             }
         }
     }
@@ -207,21 +215,25 @@ fn print_chain(path: &std::path::Path) {
 
 // ── map ───────────────────────────────────────────────────────────────────────
 
-fn cmd_map(path: &std::path::Path) {
-    let mut reader = open_or_die(path);
-    let grains = reader.iter_allocated_grains().unwrap_or_else(|e| {
-        eprintln!("error: {e}");
-        process::exit(1);
-    });
+fn cmd_map(path: &std::path::Path) -> ExitCode {
+    let mut reader = match open(path) {
+        Ok(r) => r,
+        Err(m) => return fail(m),
+    };
+    let grains = match reader.iter_allocated_grains() {
+        Ok(g) => g,
+        Err(e) => return fail(format!("error: {e}")),
+    };
     if grains.is_empty() {
         println!("# No allocated grains (all-sparse)");
-        return;
+        return ExitCode::SUCCESS;
     }
     println!("# start_lba,sector_count");
     for g in &grains {
         println!("{},{}", g.start_lba, g.sector_count);
     }
     eprintln!("{} allocated grain(s)", grains.len());
+    ExitCode::SUCCESS
 }
 
 // ── dump ──────────────────────────────────────────────────────────────────────
@@ -232,30 +244,36 @@ fn cmd_dump(
     offset: u64,
     length: Option<u64>,
     hex: bool,
-) {
-    let mut reader = open_or_die(path);
+) -> ExitCode {
+    let mut reader = match open(path) {
+        Ok(r) => r,
+        Err(m) => return fail(m),
+    };
     let disk_size = reader.virtual_disk_size();
     let end = length.map_or(disk_size, |len| offset.saturating_add(len).min(disk_size));
     let to_output = end.saturating_sub(offset);
 
-    reader.seek(SeekFrom::Start(offset)).unwrap_or_else(|e| {
-        eprintln!("seek error: {e}");
-        process::exit(1);
-    });
+    if let Err(e) = reader.seek(SeekFrom::Start(offset)) {
+        return fail(format!("seek error: {e}"));
+    }
 
     if hex {
-        dump_hex(&mut reader, offset, to_output);
-        return;
+        return match dump_hex(&mut reader, offset, to_output) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => fail(format!("read error: {e}")),
+        };
     }
 
     // Raw byte output to file or stdout.
     if let Some(out_path) = output {
-        let file = std::fs::File::create(out_path).unwrap_or_else(|e| {
-            eprintln!("cannot create {}: {e}", out_path.display());
-            process::exit(1);
-        });
+        let file = match std::fs::File::create(out_path) {
+            Ok(f) => f,
+            Err(e) => return fail(format!("cannot create {}: {e}", out_path.display())),
+        };
         let mut w = BufWriter::new(file);
-        copy_n(&mut reader, &mut w, to_output);
+        if let Err(e) = copy_n(&mut reader, &mut w, to_output) {
+            return fail(format!("write error: {e}"));
+        }
         w.flush().ok();
         eprintln!(
             "Wrote {} bytes to {}",
@@ -265,33 +283,31 @@ fn cmd_dump(
     } else {
         let stdout = io::stdout();
         let mut w = BufWriter::new(stdout.lock());
-        copy_n(&mut reader, &mut w, to_output);
+        if let Err(e) = copy_n(&mut reader, &mut w, to_output) {
+            return fail(format!("write error: {e}"));
+        }
         w.flush().ok();
     }
+    ExitCode::SUCCESS
 }
 
 /// Copy exactly `n` bytes from `reader` to `w`.
-fn copy_n<R: Read, W: Write>(reader: &mut R, w: &mut W, n: u64) {
+fn copy_n<R: Read, W: Write>(reader: &mut R, w: &mut W, n: u64) -> io::Result<()> {
     let mut remaining = n;
     let mut buf = vec![0u8; 65536];
     while remaining > 0 {
         let want = (buf.len() as u64).min(remaining) as usize;
-        let got = reader.read(&mut buf[..want]).unwrap_or_else(|e| {
-            eprintln!("read error: {e}");
-            process::exit(1);
-        });
+        let got = reader.read(&mut buf[..want])?;
         if got == 0 {
             break;
         }
-        w.write_all(&buf[..got]).unwrap_or_else(|e| {
-            eprintln!("write error: {e}");
-            process::exit(1);
-        });
+        w.write_all(&buf[..got])?;
         remaining -= got as u64;
     }
+    Ok(())
 }
 
-fn dump_hex<R: Read>(reader: &mut R, start_offset: u64, length: u64) {
+fn dump_hex<R: Read>(reader: &mut R, start_offset: u64, length: u64) -> io::Result<()> {
     let stdout = io::stdout();
     let mut w = BufWriter::new(stdout.lock());
     let mut remaining = length;
@@ -299,10 +315,7 @@ fn dump_hex<R: Read>(reader: &mut R, start_offset: u64, length: u64) {
     let mut buf = [0u8; 16];
     while remaining > 0 {
         let want = (16u64.min(remaining)) as usize;
-        let n = reader.read(&mut buf[..want]).unwrap_or_else(|e| {
-            eprintln!("read error: {e}");
-            process::exit(1);
-        });
+        let n = reader.read(&mut buf[..want])?;
         if n == 0 {
             break;
         }
@@ -331,26 +344,34 @@ fn dump_hex<R: Read>(reader: &mut R, start_offset: u64, length: u64) {
         remaining = remaining.saturating_sub(n as u64);
     }
     w.flush().ok();
+    Ok(())
 }
 
 // ── hash ──────────────────────────────────────────────────────────────────────
 
-fn cmd_hash(path: &std::path::Path) {
-    let mut reader = open_or_die(path);
+fn cmd_hash(path: &std::path::Path) -> ExitCode {
+    let mut reader = match open(path) {
+        Ok(r) => r,
+        Err(m) => return fail(m),
+    };
     reader.seek(SeekFrom::Start(0)).ok();
-    let digest = reader.hash().unwrap_or_else(|e| {
-        eprintln!("error: {e}");
-        process::exit(1);
-    });
+    let digest = match reader.hash() {
+        Ok(d) => d,
+        Err(e) => return fail(format!("error: {e}")),
+    };
     println!("SHA-256: {}", digest.sha256);
     println!("MD5:     {}", digest.md5);
     println!("File:    {}", path.display());
+    ExitCode::SUCCESS
 }
 
 // ── verify ────────────────────────────────────────────────────────────────────
 
-fn cmd_verify(path: &std::path::Path) {
-    let mut reader = open_or_die(path);
+fn cmd_verify(path: &std::path::Path) -> ExitCode {
+    let mut reader = match open(path) {
+        Ok(r) => r,
+        Err(m) => return fail(m),
+    };
     let info = reader.info();
     println!("File:    {}", path.display());
     println!("Format:  {} v{}", info.disk_type, info.version);
@@ -401,16 +422,23 @@ fn cmd_verify(path: &std::path::Path) {
 
     if failed {
         println!("Status:  FAILED");
-        process::exit(1);
+        return ExitCode::FAILURE;
     }
     println!("Status:  OK");
+    ExitCode::SUCCESS
 }
 
 // ── diff ──────────────────────────────────────────────────────────────────────
 
-fn cmd_diff(a: &std::path::Path, b: &std::path::Path) {
-    let mut ra = open_or_die(a);
-    let mut rb = open_or_die(b);
+fn cmd_diff(a: &std::path::Path, b: &std::path::Path) -> ExitCode {
+    let mut ra = match open(a) {
+        Ok(r) => r,
+        Err(m) => return fail(m),
+    };
+    let mut rb = match open(b) {
+        Ok(r) => r,
+        Err(m) => return fail(m),
+    };
     ra.seek(SeekFrom::Start(0)).ok();
     rb.seek(SeekFrom::Start(0)).ok();
 
@@ -418,7 +446,7 @@ fn cmd_diff(a: &std::path::Path, b: &std::path::Path) {
     let size_b = rb.virtual_disk_size();
     if size_a != size_b {
         println!("DIFFER: virtual disk sizes differ ({size_a} vs {size_b} bytes)");
-        process::exit(1);
+        return ExitCode::FAILURE;
     }
 
     let mut buf_a = vec![0u8; 65536];
@@ -449,13 +477,14 @@ fn cmd_diff(a: &std::path::Path, b: &std::path::Path) {
     }
     if diff_count == 0 {
         println!("IDENTICAL ({} bytes compared)", fmt_commas(size_a));
+        ExitCode::SUCCESS
     } else {
         println!("DIFFER: {diff_count} byte(s) differ");
-        process::exit(1);
+        ExitCode::FAILURE
     }
 }
 
-fn main() {
+fn main() -> ExitCode {
     let cli = Cli::parse();
     match &cli.command {
         Command::Info {
@@ -470,9 +499,7 @@ fn main() {
             offset,
             length,
             hex,
-        } => {
-            cmd_dump(path, output.as_deref(), *offset, *length, *hex);
-        }
+        } => cmd_dump(path, output.as_deref(), *offset, *length, *hex),
         Command::Hash { path } => cmd_hash(path),
         Command::Verify { path } => cmd_verify(path),
         Command::Diff { a, b } => cmd_diff(a, b),

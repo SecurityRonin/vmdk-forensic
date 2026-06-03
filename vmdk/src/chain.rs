@@ -43,18 +43,11 @@ impl VmdkChainReader {
             let reader = VmdkFileReader::open_path(&current_path)?;
             let parent_cid = reader.parent_cid();
 
-            if depth == 0 {
-                layers.push(reader);
-            } else {
-                // Validate CID chain: the child's parentCID must match this parent's CID.
-                let child_parent_cid = layers.last().map(|r| r.parent_cid()).unwrap_or(0xffff_ffff);
-                let parent_actual_cid = reader.cid();
-                if child_parent_cid != parent_actual_cid && parent_actual_cid != 0xffff_ffff {
-                    // CID mismatch: parent was modified after the snapshot was taken.
-                    // Log a warning but continue (same behaviour as QEMU).
-                }
-                layers.push(reader);
-            }
+            // A CID mismatch between a child's parentCID and its parent's CID means the
+            // parent was modified after the snapshot was taken. QEMU warns but continues,
+            // and so do we — the chain is still structurally usable — so there is no
+            // separate branch to take here; every opened layer is simply pushed.
+            layers.push(reader);
 
             if parent_cid == 0xffff_ffff {
                 break; // reached base image
@@ -221,5 +214,83 @@ mod tests {
         let (_, delta_path) = write_chain_to_dir(dir.path(), &[0u8; 512]);
         let chain = VmdkChainReader::open(&delta_path).expect("open");
         assert_eq!(chain.virtual_disk_size(), GRAIN_SIZE_BYTES as u64);
+    }
+
+    #[test]
+    fn chain_seek_variants_and_read_edges() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_, delta_path) = write_chain_to_dir(dir.path(), &[0u8; GRAIN_SIZE_BYTES]);
+        let mut chain = VmdkChainReader::open(&delta_path).unwrap();
+        let sz = chain.virtual_disk_size();
+        assert_eq!(chain.seek(SeekFrom::Start(8)).unwrap(), 8);
+        assert_eq!(chain.seek(SeekFrom::Current(-4)).unwrap(), 4);
+        assert_eq!(chain.seek(SeekFrom::End(-2)).unwrap(), sz - 2);
+        assert!(chain.seek(SeekFrom::End(-(sz as i64) - 1)).is_err());
+        chain.seek(SeekFrom::Start(sz)).unwrap();
+        assert_eq!(chain.read(&mut [0u8; 4]).unwrap(), 0);
+        chain.seek(SeekFrom::Start(0)).unwrap();
+        assert_eq!(chain.read(&mut []).unwrap(), 0);
+    }
+
+    #[test]
+    fn chain_all_sparse_reads_zeros() {
+        // A single all-sparse layer → no layer reports allocated → zero-fill path.
+        let dir = tempfile::tempdir().unwrap();
+        let bytes = crate::testutil::gd_at_end_stream_opt_vmdk();
+        let p = dir.path().join("sparse.vmdk");
+        std::fs::write(&p, &bytes).unwrap();
+        let mut chain = VmdkChainReader::open(&p).unwrap();
+        let mut buf = [0xFFu8; 512];
+        chain.read_exact(&mut buf).unwrap();
+        assert_eq!(buf, [0u8; 512]);
+    }
+
+    #[test]
+    fn chain_breaks_when_parent_hint_missing() {
+        // parentCID set but no parentFileNameHint → loop breaks, treated as base.
+        let dir = tempfile::tempdir().unwrap();
+        let desc = "# Disk DescriptorFile\nversion=1\nCID=00000002\nparentCID=00000001\ncreateType=\"monolithicSparse\"\n";
+        let bytes = crate::testutil::test_sparse_vmdk_with_descriptor(&[0u8; 512], desc);
+        let p = dir.path().join("d.vmdk");
+        std::fs::write(&p, &bytes).unwrap();
+        let chain = VmdkChainReader::open(&p).unwrap();
+        assert_eq!(chain.depth(), 1, "missing hint → no parent layer");
+    }
+
+    #[test]
+    fn chain_resolves_absolute_parent_hint() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = crate::testutil::test_sparse_vmdk_with_descriptor(
+            &[0x55u8; 512],
+            "# Disk DescriptorFile\nversion=1\nCID=00000001\nparentCID=ffffffff\ncreateType=\"monolithicSparse\"\n",
+        );
+        let base_path = dir.path().join("base.vmdk");
+        std::fs::write(&base_path, &base).unwrap();
+        let delta_desc = format!(
+            "# Disk DescriptorFile\nversion=1\nCID=00000002\nparentCID=00000001\nparentFileNameHint=\"{}\"\ncreateType=\"monolithicSparse\"\n",
+            base_path.display()
+        );
+        let delta = crate::testutil::test_sparse_vmdk_with_descriptor(&[0u8; 512], &delta_desc);
+        let delta_path = dir.path().join("delta.vmdk");
+        std::fs::write(&delta_path, &delta).unwrap();
+        let chain = VmdkChainReader::open(&delta_path).expect("absolute hint resolves");
+        assert_eq!(chain.depth(), 2, "absolute parent hint must add a layer");
+    }
+
+    #[test]
+    fn chain_depth_limit_on_self_reference() {
+        // A delta whose parentFileNameHint points at itself loops until MAX_CHAIN_DEPTH.
+        let dir = tempfile::tempdir().unwrap();
+        let desc = "# Disk DescriptorFile\nversion=1\nCID=00000001\nparentCID=00000001\nparentFileNameHint=\"self.vmdk\"\ncreateType=\"monolithicSparse\"\n";
+        let bytes = crate::testutil::test_sparse_vmdk_with_descriptor(&[0u8; 512], desc);
+        let p = dir.path().join("self.vmdk");
+        std::fs::write(&p, &bytes).unwrap();
+        match VmdkChainReader::open(&p) {
+            Err(VmdkError::InvalidGeometry(_)) => {}
+            other => panic!(
+                "self-reference must hit the depth limit, got: {:?}",
+                other.is_ok()
+            ),
+        }
     }
 }
