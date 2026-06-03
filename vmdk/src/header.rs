@@ -164,6 +164,36 @@ mod tests {
     }
 
     #[test]
+    fn parse_rejects_num_gtes_above_spec_max() {
+        // VDF 1.1 defines numGTEsPerGT as 512; QEMU rejects anything larger.
+        // Without this bound a crafted header drives an unguarded
+        // `vec![0u8; num_gtes_per_gt * 4]` in the read path — e.g. 0xFFFFFFFF
+        // yields a ~17 GiB allocation (allocation-amplification DoS).
+        let mut h = valid_header();
+        h[44..48].copy_from_slice(&513u32.to_le_bytes());
+        assert!(matches!(
+            SparseExtentHeader::parse(&h),
+            Err(VmdkError::InvalidGeometry(_))
+        ));
+
+        // The extreme crafted value must also be rejected, not allocated.
+        let mut h = valid_header();
+        h[44..48].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        assert!(matches!(
+            SparseExtentHeader::parse(&h),
+            Err(VmdkError::InvalidGeometry(_))
+        ));
+    }
+
+    #[test]
+    fn parse_accepts_num_gtes_at_spec_max() {
+        // Exactly 512 is the canonical value and must remain valid.
+        let mut h = valid_header();
+        h[44..48].copy_from_slice(&512u32.to_le_bytes());
+        assert!(SparseExtentHeader::parse(&h).is_ok());
+    }
+
+    #[test]
     fn parse_rejects_compressed_flag_on_v1() {
         let mut h = valid_header();
         h[77..79].copy_from_slice(&1u16.to_le_bytes()); // compress on v1 is invalid
