@@ -1490,10 +1490,16 @@ mod tests {
         let vmdk = test_sparse_vmdk(&[0u8; 512]);
         let mut reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
         let report = reader.check_integrity().expect("check_integrity");
-        assert!(report.is_ok(), "clean VMDK must report no anomalies: {report:?}");
+        assert!(
+            report.is_ok(),
+            "clean VMDK must report no anomalies: {report:?}"
+        );
         assert_eq!(report.out_of_bounds_grains, 0);
         assert_eq!(report.out_of_bounds_grain_tables, 0);
-        assert_eq!(report.grains_checked, 1, "one allocated grain in test_sparse_vmdk");
+        assert_eq!(
+            report.grains_checked, 1,
+            "one allocated grain in test_sparse_vmdk"
+        );
     }
 
     #[test]
@@ -1505,7 +1511,10 @@ mod tests {
         vmdk[gt_byte..gt_byte + 4].copy_from_slice(&0x00FF_FFFFu32.to_le_bytes()); // huge sector
         let mut reader = VmdkReader::open(Cursor::new(vmdk)).expect("open");
         let report = reader.check_integrity().expect("check_integrity");
-        assert!(!report.is_ok(), "corrupted grain pointer must fail integrity");
+        assert!(
+            !report.is_ok(),
+            "corrupted grain pointer must fail integrity"
+        );
         assert_eq!(
             report.out_of_bounds_grains, 1,
             "the one out-of-bounds grain must be counted"

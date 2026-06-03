@@ -374,6 +374,35 @@ fn cmd_verify(path: &std::path::Path) {
         Err(e) => println!("Allocation scan: ERROR — {e}"),
     }
 
+    // Structural integrity: dangling GD/GT pointers signal truncation or tampering.
+    let mut failed = false;
+    match reader.check_integrity() {
+        Ok(report) if report.is_ok() => {
+            println!(
+                "Integrity: OK ({} grains checked, no out-of-bounds pointers)",
+                fmt_commas(report.grains_checked)
+            );
+        }
+        Ok(report) => {
+            failed = true;
+            println!(
+                "Integrity: FAIL — {} out-of-bounds grain(s), {} out-of-bounds grain table(s) \
+                 of {} checked",
+                report.out_of_bounds_grains,
+                report.out_of_bounds_grain_tables,
+                fmt_commas(report.grains_checked)
+            );
+        }
+        Err(e) => {
+            failed = true;
+            println!("Integrity: ERROR — {e}");
+        }
+    }
+
+    if failed {
+        println!("Status:  FAILED");
+        process::exit(1);
+    }
     println!("Status:  OK");
 }
 

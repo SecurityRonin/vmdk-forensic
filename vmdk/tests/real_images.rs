@@ -421,7 +421,12 @@ fn extent_dependencies_real_monolithic_sparse_is_empty() {
 
 #[test]
 fn check_integrity_real_images_are_clean() {
-    for name in ["minimal.vmdk", "dfvfs_ext2.vmdk", "plaso_image.vmdk", "stream_opt.vmdk"] {
+    for name in [
+        "minimal.vmdk",
+        "dfvfs_ext2.vmdk",
+        "plaso_image.vmdk",
+        "stream_opt.vmdk",
+    ] {
         let data = read_fixture(name);
         let mut reader = vmdk::VmdkReader::open(Cursor::new(data))
             .unwrap_or_else(|e| panic!("open {name}: {e:?}"));
