@@ -24,8 +24,21 @@ vmdk = "0.1"
 ## CLI usage
 
 ```bash
-vmdk info disk.vmdk          # Format, virtual disk size, sector size
+vmdk info disk.vmdk                      # Format, sizes, compression, CID
+vmdk info disk.vmdk --descriptor         # Print the raw embedded descriptor
+vmdk info disk.vmdk --chain              # Walk the snapshot/delta chain
+vmdk map  disk.vmdk                      # Allocated grain ranges (start_lba,sectors)
+vmdk dump disk.vmdk -o disk.raw          # Extract the raw virtual disk
+vmdk dump disk.vmdk | xxd | less         # Stream to stdout (pipe to any tool)
+vmdk dump disk.vmdk --offset 1024 --length 64 --hex   # Hex-dump a byte range
+vmdk hash disk.vmdk                      # SHA-256 + MD5 of the virtual disk
+vmdk verify disk.vmdk                    # RGD validation + allocation scan
+vmdk diff a.vmdk b.vmdk                  # Byte-for-byte comparison
 ```
+
+> **Note:** VMDK is a *block container* — it stores raw disk sectors, not files.
+> `vmdk dump` extracts the whole virtual disk; to pull out individual files, pipe
+> the output (or `VmdkReader`) into a filesystem reader (NTFS, ext4, …).
 
 ## Library quick start
 
@@ -78,10 +91,18 @@ let reader = VmdkReader::open_path(std::path::Path::new("disk.vmdk"))?;
 - **streamOptimized** — sparse and compressed (zlib / RFC 1950) grains; `GrainMarker` decoded at read time
 - **twoGbMaxExtentFlat / monolithicFlat** — multi-file flat extent descriptors; opens via `open_path`
 - **twoGbMaxExtentSparse** — multi-file sparse extent descriptors; each extent is an independent binary VMDK with its own GD/GT
-- **O(1) virtual offset resolution** — GD loaded at open, one GT read + one seek per grain access
+- **vmfsSparse / vmfsThin (COWD)** — ESXi redo-log / snapshot deltas; `"COWD"` magic, 32-bit grain tables
+- **seSparse** — vSphere 6.5+ VMFS6 snapshots; dual `CAFEBABE`/`CAFECAFE` headers, nibble-typed bit-rotated grain entries
+- **Snapshot chains** — `VmdkChainReader` walks `parentFileNameHint` / `parentCID`, layering deltas over the base (cycle-guarded)
+- **Metadata & triage** — `info()` → `VmdkInfo` (version, CID/parentCID, grain size, compression); `iter_allocated_grains()` and `is_allocated()` for sparse-aware forensic triage
+- **Acquisition hashing** — `hash()` streams SHA-256 + MD5 over the virtual disk in one pass
+- **Integrity** — `validate_rgd()` cross-checks the redundant grain directory against the primary
+- **O(1) virtual offset resolution** — GD loaded at open, one cached GT read + one seek per grain access
 - **Graceful rejection** — unknown formats and bad magic return `Err`, never panic
-- **Fuzz-hardened** — proptest + cargo-fuzz; all corpus inputs verified not to panic
+- **Fuzz-hardened** — proptest + cargo-fuzz; allocation caps and overflow guards on crafted inputs
+- **Independently validated** — COWD & seSparse output is byte-identical to `qemu-img`
 - **Zero unsafe code** — `#![forbid(unsafe_code)]`
+- **Optional `serde`** — `VmdkInfo` / `AllocatedGrain` serialize to JSON under the `serde` feature
 - **MIT licensed** — no GPL, safe for proprietary DFIR tooling
 
 ## Format support
@@ -94,6 +115,15 @@ let reader = VmdkReader::open_path(std::path::Path::new("disk.vmdk"))?;
 | `twoGbMaxExtentFlat` | ✓ (`open_path` only) |
 | `monolithicFlat` | ✓ (`open_path` only) |
 | `twoGbMaxExtentSparse` | ✓ (`open_path` only) |
+| `vmfsSparse` / `vmfsThin` (ESXi COWD) | ✓ (`open_path` only) |
+| `seSparse` (vSphere 6.5+ / VMFS6) | ✓ (`open_path` only) |
+| `vmfs` / `vmfsPreallocated` / `vmfsEagerZeroedThick` | ✓ (`open_path` only) |
+| Snapshot / delta chains (`parentCID` + hint) | ✓ (`VmdkChainReader`) |
+
+COWD and seSparse output is validated **byte-identical to `qemu-img convert -O raw`**
+(QEMU's independent parser) — see [docs/validation.md](docs/validation.md).
+Physical Raw Device Maps (`vmfsRDM`/`vmfsRDMP`) are intentionally unsupported:
+they reference a physical device and carry no readable data.
 
 `VmdkReader::open` and `open_path` return `Err` (never panic) on unrecognised inputs.
 
@@ -113,9 +143,12 @@ Virtual offset resolution is O(1): one GD lookup (in-memory `Vec<u32>`) + one GT
 
 ## Testing
 
-- **59 tests** across unit, integration real-images, and integration synthetic suites
+- **125 tests** across unit, integration real-images, and synthetic suites
 - Validated against real VMware-generated images from the [dfvfs](https://github.com/log2timeline/dfvfs)
   and [plaso](https://github.com/log2timeline/plaso) forensics test corpora
+- **COWD & seSparse validated byte-identical to `qemu-img`** — independent-parser
+  cross-validation (QEMU reads but cannot write these ESXi formats), so our reader
+  is checked against an unrelated implementation, not just our own fixtures
 - External validation against pWnOS v2.0 (VulnHub, VMware Workstation 7, 40 GiB sparse image)
   and Metasploitable3 Windows 2008 (Rapid7, VMware Workstation 13, `twoGbMaxExtentSparse`)
 
