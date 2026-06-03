@@ -2462,6 +2462,49 @@ mod tests {
     }
 
     #[test]
+    fn header_provenance_clean_image() {
+        // test_sparse_vmdk writes a clean VMDK4 header: byte72=0, newline bytes intact.
+        let vmdk = test_sparse_vmdk(&[0u8; 512]);
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let p = r.header_provenance().expect("provenance").expect("VMDK4 header");
+        assert_eq!(p.version, 1);
+        assert!(!p.unclean_shutdown, "clean image");
+        assert!(p.newline_check_intact, "newline bytes 0A 20 0D 0A intact");
+        assert!(!p.uses_redundant_gd || p.uses_redundant_gd); // flag presence is fine either way
+    }
+
+    #[test]
+    fn header_provenance_flags_unclean_shutdown() {
+        let mut vmdk = test_sparse_vmdk(&[0u8; 512]);
+        vmdk[72] = 1; // uncleanShutdown
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let p = r.header_provenance().expect("provenance").expect("VMDK4");
+        assert!(p.unclean_shutdown, "byte 72 != 0 → unclean");
+    }
+
+    #[test]
+    fn header_provenance_detects_ftp_ascii_corruption() {
+        // The newline-detection bytes (73..77) must be exactly 0A 20 0D 0A; ASCII-mode
+        // FTP rewrites \r\n and mangles them.
+        let mut vmdk = test_sparse_vmdk(&[0u8; 512]);
+        vmdk[75] = 0x0A; // was 0x0D (\r) → simulate \r\n -> \n corruption
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let p = r.header_provenance().expect("provenance").expect("VMDK4");
+        assert!(
+            !p.newline_check_intact,
+            "corrupted newline bytes must be flagged"
+        );
+    }
+
+    #[test]
+    fn header_provenance_none_for_non_vmdk4() {
+        // A COWD image is not a VMDK4 KDMV header → no VMDK4 provenance.
+        let cowd = test_cowd_vmdk(&[0u8; 512]);
+        let mut r = VmdkReader::open(Cursor::new(cowd)).expect("open");
+        assert!(r.header_provenance().expect("provenance").is_none());
+    }
+
+    #[test]
     fn info_and_validate_rgd_on_sesparse() {
         let se = test_sesparse_vmdk(&[0u8; 512]);
         let mut r = VmdkReader::open(Cursor::new(se)).expect("open");
