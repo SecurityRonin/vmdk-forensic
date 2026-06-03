@@ -1086,6 +1086,41 @@ mod tests {
         h
     }
 
+    // ── Header version 2 (zeroed-grain feature) + ZERO extent type ───────────
+
+    #[test]
+    fn header_version_2_zeroed_grain_opens() {
+        // VMware images with the zeroed-grain feature carry version=2 + flag bit 2.
+        // QEMU accepts any VMDK4-magic version; we must accept v2 too, not just 1/3.
+        let mut vmdk = test_sparse_vmdk(&[0u8; 512]);
+        vmdk[4..8].copy_from_slice(&2u32.to_le_bytes()); // version = 2
+        vmdk[8..12].copy_from_slice(&0x0000_0004u32.to_le_bytes()); // VMDK4_FLAG_ZERO_GRAIN
+        let reader = VmdkReader::open(Cursor::new(vmdk));
+        assert!(
+            reader.is_ok(),
+            "version=2 (zeroed-grain) monolithicSparse must open, got: {:?}",
+            reader.err()
+        );
+    }
+
+    #[test]
+    fn zero_extent_type_reads_as_zeros() {
+        // A ZERO extent emulates a zero-filled region with NO backing file.
+        // `RW <sectors> ZERO` — valid per the VMware descriptor spec.
+        use std::io::Write as _;
+        let dir = tempfile::tempdir().unwrap();
+        let desc = "# Disk DescriptorFile\nversion=1\nCID=ffffffff\nparentCID=ffffffff\ncreateType=\"monolithicFlat\"\nRW 2048 ZERO\n";
+        let desc_path = dir.path().join("zero.vmdk");
+        std::fs::File::create(&desc_path).unwrap().write_all(desc.as_bytes()).unwrap();
+        let mut reader = VmdkFileReader::open_path(&desc_path)
+            .expect("descriptor with a ZERO extent must open");
+        assert_eq!(reader.virtual_disk_size(), 2048 * 512, "ZERO extent contributes its sector count");
+        reader.seek(SeekFrom::Start(0)).unwrap();
+        let mut buf = [0xFFu8; 512];
+        reader.read_exact(&mut buf).expect("read");
+        assert_eq!(buf, [0u8; 512], "ZERO extent must read as zeros");
+    }
+
     #[test]
     fn grain_size_zero_rejected() {
         let img = vmdk_header_bytes(8, 0, 512);
