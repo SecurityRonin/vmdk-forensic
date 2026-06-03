@@ -1240,6 +1240,79 @@ mod tests {
         assert_flat_create_type_reads("vmfsRawDeviceMap", "VMFSRAW", 0x4B);
     }
 
+    // ── extent_dependencies (companion-file discovery for evidence collection) ──
+
+    #[test]
+    fn extent_dependencies_lists_flat_companion() {
+        // A twoGbMaxExtentFlat descriptor must report its companion extent file so a
+        // forensic examiner knows what to collect before the disk can be read.
+        use std::io::Write as _;
+        let dir = tempfile::tempdir().unwrap();
+        let desc = "# Disk DescriptorFile\nversion=1\nCID=ffffffff\nparentCID=ffffffff\ncreateType=\"twoGbMaxExtentFlat\"\nRW 2048 FLAT \"disk-f001.vmdk\" 0\n";
+        let desc_path = dir.path().join("disk.vmdk");
+        std::fs::File::create(&desc_path)
+            .unwrap()
+            .write_all(desc.as_bytes())
+            .unwrap();
+        let deps = VmdkFileReader::extent_dependencies(&desc_path).expect("extent_dependencies");
+        assert_eq!(deps.len(), 1, "one companion extent");
+        assert_eq!(
+            deps[0].file_name().unwrap().to_string_lossy(),
+            "disk-f001.vmdk"
+        );
+        // Paths must be resolved relative to the descriptor's directory.
+        assert_eq!(deps[0].parent().unwrap(), dir.path());
+    }
+
+    #[test]
+    fn extent_dependencies_lists_sparse_companions() {
+        use std::io::Write as _;
+        let dir = tempfile::tempdir().unwrap();
+        let desc = "# Disk DescriptorFile\nversion=1\nCID=ffffffff\nparentCID=ffffffff\ncreateType=\"twoGbMaxExtentSparse\"\nRW 4194304 SPARSE \"disk-s001.vmdk\"\nRW 4194304 SPARSE \"disk-s002.vmdk\"\n";
+        let desc_path = dir.path().join("disk.vmdk");
+        std::fs::File::create(&desc_path)
+            .unwrap()
+            .write_all(desc.as_bytes())
+            .unwrap();
+        let deps = VmdkFileReader::extent_dependencies(&desc_path).expect("deps");
+        let names: Vec<String> = deps
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["disk-s001.vmdk", "disk-s002.vmdk"]);
+    }
+
+    #[test]
+    fn extent_dependencies_empty_for_self_contained_binary() {
+        // A binary single-file VMDK (no text descriptor) is self-contained → no deps.
+        use std::io::Write as _;
+        let dir = tempfile::tempdir().unwrap();
+        let vmdk = test_sparse_vmdk(&[0u8; 512]);
+        let path = dir.path().join("mono.vmdk");
+        std::fs::File::create(&path).unwrap().write_all(&vmdk).unwrap();
+        let deps = VmdkFileReader::extent_dependencies(&path).expect("deps");
+        assert!(deps.is_empty(), "self-contained binary VMDK has no companions");
+    }
+
+    #[test]
+    fn extent_dependencies_excludes_zero_extents() {
+        // ZERO extents have no backing file and must not appear as a dependency.
+        use std::io::Write as _;
+        let dir = tempfile::tempdir().unwrap();
+        let desc = "# Disk DescriptorFile\nversion=1\nCID=ffffffff\nparentCID=ffffffff\ncreateType=\"monolithicFlat\"\nRW 2048 ZERO\nRW 2048 FLAT \"real-f001.vmdk\" 0\n";
+        let desc_path = dir.path().join("disk.vmdk");
+        std::fs::File::create(&desc_path)
+            .unwrap()
+            .write_all(desc.as_bytes())
+            .unwrap();
+        let deps = VmdkFileReader::extent_dependencies(&desc_path).expect("deps");
+        let names: Vec<String> = deps
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["real-f001.vmdk"], "ZERO extent contributes no file");
+    }
+
     #[test]
     fn grain_size_zero_rejected() {
         let img = vmdk_header_bytes(8, 0, 512);
