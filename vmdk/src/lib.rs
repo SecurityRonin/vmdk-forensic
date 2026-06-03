@@ -12,6 +12,7 @@ use std::path::Path;
 
 mod chain;
 mod cowd;
+mod ddb;
 mod descriptor;
 pub(crate) mod error;
 mod flat;
