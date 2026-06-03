@@ -550,6 +550,12 @@ mod tests {
     }
 
     #[test]
+    fn info_prints_companion_files_for_multifile_vmdk() {
+        // flat.vmdk references flat-f001.vmdk → exercises the companion-files block.
+        assert!(is_success(cmd_info(&data("flat.vmdk"), false, false)));
+    }
+
+    #[test]
     fn commands_fail_on_missing_or_garbage_paths() {
         let dir = tempfile::tempdir().unwrap();
         let garbage = dir.path().join("g.bin");

@@ -1476,6 +1476,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn extent_dependencies_skips_empty_sparse_filename() {
+        // A SPARSE extent with an empty filename is skipped (defensive guard).
+        use std::io::Write as _;
+        let dir = tempfile::tempdir().unwrap();
+        let desc = "# Disk DescriptorFile\nversion=1\nCID=ffffffff\nparentCID=ffffffff\ncreateType=\"twoGbMaxExtentSparse\"\nRW 8 SPARSE \"\"\nRW 8 SPARSE \"real-s001.vmdk\"\n";
+        let desc_path = dir.path().join("disk.vmdk");
+        std::fs::File::create(&desc_path)
+            .unwrap()
+            .write_all(desc.as_bytes())
+            .unwrap();
+        let deps = VmdkFileReader::extent_dependencies(&desc_path).expect("deps");
+        let names: Vec<String> = deps
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            names,
+            vec!["real-s001.vmdk"],
+            "empty-filename sparse extent skipped"
+        );
+    }
+
     // ── check_integrity (dangling-pointer / corruption detection) ─────────────
 
     #[test]
@@ -2596,6 +2619,26 @@ mod tests {
         r.read_exact(&mut buf).unwrap();
         assert_eq!(buf, [0u8; 512]);
         // iter_allocated_grains skips both the sparse GTE and the empty GD entry.
+        assert!(r.iter_allocated_grains().expect("iter").is_empty());
+        // check_integrity walks the zero-GD entry via the gt_sector==0 continue.
+        let rep = r.check_integrity().expect("integrity");
+        assert!(rep.is_ok());
+        assert_eq!(rep.grains_checked, 0);
+    }
+
+    #[test]
+    fn flat_zero_capacity_iter_is_empty() {
+        // A ZERO-only flat descriptor with 0 sectors → empty virtual disk → no grains.
+        use std::io::Write as _;
+        let dir = tempfile::tempdir().unwrap();
+        let desc = "# Disk DescriptorFile\nversion=1\nCID=ffffffff\nparentCID=ffffffff\ncreateType=\"monolithicFlat\"\nRW 0 ZERO\n";
+        let p = dir.path().join("empty.vmdk");
+        std::fs::File::create(&p)
+            .unwrap()
+            .write_all(desc.as_bytes())
+            .unwrap();
+        let mut r = VmdkFileReader::open_path(&p).expect("open empty flat");
+        assert_eq!(r.virtual_disk_size(), 0);
         assert!(r.iter_allocated_grains().expect("iter").is_empty());
     }
 }
