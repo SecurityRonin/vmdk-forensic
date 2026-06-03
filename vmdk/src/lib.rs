@@ -1328,7 +1328,10 @@ mod tests {
             .arg(&qemu_raw)
             .status()
             .expect("run qemu-img convert");
-        assert!(status.success(), "qemu-img convert failed for {create_type}");
+        assert!(
+            status.success(),
+            "qemu-img convert failed for {create_type}"
+        );
         let qemu_bytes = std::fs::read(&qemu_raw).unwrap();
 
         // Our reader.

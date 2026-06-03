@@ -125,8 +125,8 @@ fn flat_vmdk_reads_return_zeros_via_open_path() {
 #[test]
 fn stream_opt_vmdk_opens_and_has_correct_size() {
     let data = read_fixture("stream_opt.vmdk");
-    let reader = vmdk::VmdkReader::open(Cursor::new(data))
-        .expect("streamOptimized v3 must open via open()");
+    let reader =
+        vmdk::VmdkReader::open(Cursor::new(data)).expect("streamOptimized v3 must open via open()");
     assert_eq!(
         reader.virtual_disk_size(),
         1_048_576,
@@ -142,11 +142,13 @@ fn stream_opt_vmdk_opens_and_has_correct_size() {
 #[test]
 fn stream_opt_vmdk_reads_return_zeros() {
     let data = read_fixture("stream_opt.vmdk");
-    let mut reader = vmdk::VmdkReader::open(Cursor::new(data))
-        .expect("open stream_opt.vmdk");
+    let mut reader = vmdk::VmdkReader::open(Cursor::new(data)).expect("open stream_opt.vmdk");
     let mut buf = [0xFFu8; 512];
     reader.read_exact(&mut buf).expect("read sector 0");
-    assert_eq!(buf, [0u8; 512], "all-sparse streamOptimized VMDK must read as zeros");
+    assert_eq!(
+        buf, [0u8; 512],
+        "all-sparse streamOptimized VMDK must read as zeros"
+    );
 }
 
 // ── plaso_image.vmdk (VMware Workstation 4, monolithicSparse, real data) ─────
@@ -159,8 +161,7 @@ fn stream_opt_vmdk_reads_return_zeros() {
 #[test]
 fn plaso_image_vmdk_opens_and_has_correct_size() {
     let data = read_fixture("plaso_image.vmdk");
-    let reader = vmdk::VmdkReader::open(Cursor::new(data))
-        .expect("plaso_image.vmdk must open");
+    let reader = vmdk::VmdkReader::open(Cursor::new(data)).expect("plaso_image.vmdk must open");
     assert_eq!(
         reader.virtual_disk_size(),
         102_400,
@@ -194,11 +195,15 @@ fn plaso_image_vmdk_has_real_data_at_offset_1024() {
     let mut reader = vmdk::VmdkReader::open(Cursor::new(data)).expect("open");
     reader.seek(SeekFrom::Start(1024)).expect("seek to 1024");
     let mut buf = [0u8; 16];
-    reader.read_exact(&mut buf).expect("read 16 bytes at offset 1024");
+    reader
+        .read_exact(&mut buf)
+        .expect("read 16 bytes at offset 1024");
     assert_eq!(
         buf,
-        [0x10, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00,
-         0x05, 0x00, 0x00, 0x00, 0x4a, 0x00, 0x00, 0x00],
+        [
+            0x10, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x4a, 0x00,
+            0x00, 0x00
+        ],
         "plaso_image.vmdk: known data at virtual offset 1024 must match corpus"
     );
 }
@@ -275,8 +280,8 @@ fn mono_flat_vmdk_opens_via_open_path() {
 #[test]
 fn mono_flat_vmdk_reads_return_zeros() {
     let path = format!("{DATA_DIR}/mono_flat.vmdk");
-    let mut reader = vmdk::VmdkReader::open_path(std::path::Path::new(&path))
-        .expect("open mono_flat.vmdk");
+    let mut reader =
+        vmdk::VmdkReader::open_path(std::path::Path::new(&path)).expect("open mono_flat.vmdk");
     let mut buf = [0xFFu8; 512];
     reader.read_exact(&mut buf).expect("read sector 0");
     assert_eq!(buf, [0u8; 512], "mono_flat-flat.vmdk is entirely zero");
@@ -303,11 +308,14 @@ fn tw_sparse_vmdk_opens_via_open_path() {
 #[test]
 fn tw_sparse_vmdk_reads_return_zeros() {
     let path = format!("{DATA_DIR}/tw_sparse.vmdk");
-    let mut reader = vmdk::VmdkReader::open_path(std::path::Path::new(&path))
-        .expect("open tw_sparse.vmdk");
+    let mut reader =
+        vmdk::VmdkReader::open_path(std::path::Path::new(&path)).expect("open tw_sparse.vmdk");
     let mut buf = [0xFFu8; 512];
     reader.read_exact(&mut buf).expect("read sector 0");
-    assert_eq!(buf, [0u8; 512], "all-sparse twoGbMaxExtentSparse must read as zeros");
+    assert_eq!(
+        buf, [0u8; 512],
+        "all-sparse twoGbMaxExtentSparse must read as zeros"
+    );
 }
 
 #[test]
@@ -316,8 +324,8 @@ fn tw_sparse_data_vmdk_reads_correct_pattern() {
     // Source pattern: bytes(i%256 for i in range(4MiB)).
     // First 16 bytes of grain 0 = [0, 1, 2, ..., 15].
     let path = format!("{DATA_DIR}/tw_sparse_data.vmdk");
-    let mut reader = vmdk::VmdkReader::open_path(std::path::Path::new(&path))
-        .expect("open tw_sparse_data.vmdk");
+    let mut reader =
+        vmdk::VmdkReader::open_path(std::path::Path::new(&path)).expect("open tw_sparse_data.vmdk");
     let mut buf = [0u8; 16];
     reader.seek(SeekFrom::Start(0)).expect("seek");
     reader.read_exact(&mut buf).expect("read 16 bytes");
@@ -339,9 +347,13 @@ fn tw_sparse_data_vmdk_reads_correct_pattern() {
 #[test]
 fn compressed_stream_opt_opens_and_has_correct_size() {
     let data = read_fixture("compressed_stream_opt.vmdk");
-    let reader = vmdk::VmdkReader::open(Cursor::new(data))
-        .expect("compressed_stream_opt.vmdk must open");
-    assert_eq!(reader.virtual_disk_size(), 65_536, "128 sectors * 512 = 64 KiB");
+    let reader =
+        vmdk::VmdkReader::open(Cursor::new(data)).expect("compressed_stream_opt.vmdk must open");
+    assert_eq!(
+        reader.virtual_disk_size(),
+        65_536,
+        "128 sectors * 512 = 64 KiB"
+    );
     assert_eq!(reader.disk_type(), "streamOptimized");
 }
 
@@ -350,8 +362,8 @@ fn compressed_stream_opt_reads_correct_data() {
     // The decompressed grain at virtual offset 0 must match the source pattern.
     // First 16 bytes: [0, 1, 2, ..., 15] (verified with Python zlib.decompress).
     let data = read_fixture("compressed_stream_opt.vmdk");
-    let mut reader = vmdk::VmdkReader::open(Cursor::new(data))
-        .expect("open compressed_stream_opt.vmdk");
+    let mut reader =
+        vmdk::VmdkReader::open(Cursor::new(data)).expect("open compressed_stream_opt.vmdk");
     let mut buf = [0u8; 16];
     reader.read_exact(&mut buf).expect("read 16 bytes");
     assert_eq!(

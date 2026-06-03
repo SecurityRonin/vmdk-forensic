@@ -44,10 +44,12 @@ impl MultiSparseReader {
                 file.seek(SeekFrom::Start(0))?;
                 let (grain_dir, grain_size_bytes) = cowd::open_cowd(&mut file)
                     .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
-                let byte_end = byte_offset + u64::from(
-                    cowd::CowdHeader::parse(&hdr_bytes)
-                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?.capacity
-                ) * SECTOR_SIZE;
+                let byte_end = byte_offset
+                    + u64::from(
+                        cowd::CowdHeader::parse(&hdr_bytes)
+                            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
+                            .capacity,
+                    ) * SECTOR_SIZE;
                 chunks.push(SparseChunk {
                     byte_start: byte_offset,
                     byte_end,
@@ -78,9 +80,9 @@ impl MultiSparseReader {
                 .checked_add(num_gtes_per_gt - 1)
                 .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "num_gts overflow"))?
                 / num_gtes_per_gt;
-            let gd_byte_len = num_gts
-                .checked_mul(4)
-                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "gd_byte_len overflow"))?;
+            let gd_byte_len = num_gts.checked_mul(4).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "gd_byte_len overflow")
+            })?;
 
             const MAX_GD: u64 = 16 * 1024 * 1024;
             if gd_byte_len > MAX_GD {
@@ -139,7 +141,12 @@ impl Read for MultiSparseReader {
 
         let (byte_start, byte_end, grain_size, num_gtes_per_gt) = {
             let c = &self.chunks[chunk_idx];
-            (c.byte_start, c.byte_end, c.grain_size_bytes, c.num_gtes_per_gt)
+            (
+                c.byte_start,
+                c.byte_end,
+                c.grain_size_bytes,
+                c.num_gtes_per_gt,
+            )
         };
 
         let local_pos = self.pos - byte_start;
