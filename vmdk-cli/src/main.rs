@@ -144,6 +144,21 @@ fn cmd_info(path: &std::path::Path, descriptor: bool, chain: bool) {
         let line_count = info.descriptor_text.lines().count();
         println!("Descriptor:        {line_count} lines (see --descriptor)");
     }
+
+    // Companion extent files an examiner must collect alongside this descriptor.
+    if let Ok(deps) = VmdkFileReader::extent_dependencies(path) {
+        if !deps.is_empty() {
+            println!("Companion files:   {} extent(s) required:", deps.len());
+            for d in &deps {
+                let name = d
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| d.to_string_lossy().into_owned());
+                let present = if d.exists() { "" } else { "  (MISSING)" };
+                println!("                   - {name}{present}");
+            }
+        }
+    }
 }
 
 fn print_descriptor(path: &std::path::Path) {
