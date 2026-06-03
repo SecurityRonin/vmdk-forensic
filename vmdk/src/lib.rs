@@ -869,6 +869,49 @@ impl<R: Read + Seek> VmdkReader<R> {
 // ── open_path (path-aware, all formats) ──────────────────────────────────────
 
 impl VmdkFileReader {
+    /// List the companion extent files this VMDK depends on, resolved relative to
+    /// the descriptor's directory.
+    ///
+    /// For a self-contained binary VMDK (`monolithicSparse`, `streamOptimized`, …)
+    /// this is empty — the single file holds everything. For multi-file formats
+    /// (`twoGbMaxExtent*`, `monolithicFlat`, `vmfsSparse`, `seSparse`, `custom`, …)
+    /// it returns every backing extent file in descriptor order. `ZERO`/`NOACCESS`
+    /// extents carry no file and are excluded.
+    ///
+    /// Forensic use: enumerate what must be collected *before* the disk can be read,
+    /// without opening (or even possessing) the extents themselves.
+    pub fn extent_dependencies(path: &Path) -> Result<Vec<std::path::PathBuf>, VmdkError> {
+        // Peek the first byte: binary VMDKs (non-`#`) are self-contained.
+        let first_byte = {
+            let mut buf = [0u8; 1];
+            File::open(path)?.read_exact(&mut buf)?;
+            buf[0]
+        };
+        if first_byte != b'#' {
+            return Ok(Vec::new());
+        }
+        let text = std::fs::read_to_string(path)?;
+        let desc = parse_text_descriptor(&text)?;
+        let dir = path.parent().unwrap_or(Path::new("."));
+
+        let mut deps = Vec::new();
+        // Flat extents (FLAT/VMFS/VMFSRAW); ZERO/NOACCESS have no backing file.
+        for ext in &desc.extents {
+            if ext.is_zero || ext.filename.is_empty() {
+                continue;
+            }
+            deps.push(dir.join(ext.filename.as_ref()));
+        }
+        // Sparse extents (SPARSE/VMFSSPARSE/SESPARSE) always have a backing file.
+        for ext in &desc.sparse_extents {
+            if ext.filename.is_empty() {
+                continue;
+            }
+            deps.push(dir.join(ext.filename.as_ref()));
+        }
+        Ok(deps)
+    }
+
     /// Open any VMDK format from a file-system path.
     ///
     /// Unlike [`VmdkReader::open`], this constructor handles text-descriptor
@@ -1289,9 +1332,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vmdk = test_sparse_vmdk(&[0u8; 512]);
         let path = dir.path().join("mono.vmdk");
-        std::fs::File::create(&path).unwrap().write_all(&vmdk).unwrap();
+        std::fs::File::create(&path)
+            .unwrap()
+            .write_all(&vmdk)
+            .unwrap();
         let deps = VmdkFileReader::extent_dependencies(&path).expect("deps");
-        assert!(deps.is_empty(), "self-contained binary VMDK has no companions");
+        assert!(
+            deps.is_empty(),
+            "self-contained binary VMDK has no companions"
+        );
     }
 
     #[test]
@@ -1310,7 +1359,11 @@ mod tests {
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
             .collect();
-        assert_eq!(names, vec!["real-f001.vmdk"], "ZERO extent contributes no file");
+        assert_eq!(
+            names,
+            vec!["real-f001.vmdk"],
+            "ZERO extent contributes no file"
+        );
     }
 
     #[test]

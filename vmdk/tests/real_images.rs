@@ -372,3 +372,47 @@ fn compressed_stream_opt_reads_correct_data() {
         "decompressed grain must match source pattern bytes(i%64 for i in range(65536))"
     );
 }
+
+// ── extent_dependencies against real QEMU/VMware descriptors ─────────────────
+
+#[test]
+fn extent_dependencies_real_flat_vmdk() {
+    // Real twoGbMaxExtentFlat descriptor references flat-f001.vmdk (a committed file).
+    let path = std::path::Path::new(DATA_DIR).join("flat.vmdk");
+    let deps = vmdk::VmdkFileReader::extent_dependencies(&path).expect("deps");
+    assert_eq!(deps.len(), 1, "flat.vmdk has one companion extent");
+    assert_eq!(
+        deps[0].file_name().unwrap().to_string_lossy(),
+        "flat-f001.vmdk"
+    );
+    assert!(
+        deps[0].exists(),
+        "the reported companion file must exist on disk"
+    );
+}
+
+#[test]
+fn extent_dependencies_real_two_gb_sparse_vmdk() {
+    // Real twoGbMaxExtentSparse descriptor references tw_sparse-s001.vmdk.
+    let path = std::path::Path::new(DATA_DIR).join("tw_sparse.vmdk");
+    let deps = vmdk::VmdkFileReader::extent_dependencies(&path).expect("deps");
+    assert!(
+        deps.iter()
+            .any(|p| p.file_name().unwrap() == "tw_sparse-s001.vmdk"),
+        "must list the SPARSE companion, got: {deps:?}"
+    );
+    for d in &deps {
+        assert!(d.exists(), "companion {d:?} must exist");
+    }
+}
+
+#[test]
+fn extent_dependencies_real_monolithic_sparse_is_empty() {
+    // dfvfs_ext2.vmdk is a self-contained binary monolithicSparse — no companions.
+    let path = std::path::Path::new(DATA_DIR).join("dfvfs_ext2.vmdk");
+    let deps = vmdk::VmdkFileReader::extent_dependencies(&path).expect("deps");
+    assert!(
+        deps.is_empty(),
+        "self-contained binary VMDK has no deps, got: {deps:?}"
+    );
+}
