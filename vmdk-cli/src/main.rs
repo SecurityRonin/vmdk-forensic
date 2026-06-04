@@ -56,7 +56,12 @@ enum Command {
     },
 
     /// List allocated (non-sparse) grain ranges as `start_lba,sector_count`
-    Map { path: PathBuf },
+    Map {
+        path: PathBuf,
+        /// Recover via the redundant grain directory when the primary GD is damaged
+        #[arg(long)]
+        recover: bool,
+    },
 
     /// Output virtual disk bytes — to stdout, a file (-o), or as a hex dump (--hex)
     Dump {
@@ -223,11 +228,14 @@ fn print_chain(path: &std::path::Path) -> ExitCode {
 
 // ── map ───────────────────────────────────────────────────────────────────────
 
-fn cmd_map(path: &std::path::Path) -> ExitCode {
+fn cmd_map(path: &std::path::Path, recover: bool) -> ExitCode {
     let mut reader = match open(path) {
         Ok(r) => r,
         Err(m) => return fail(m),
     };
+    if recover {
+        reader.enable_rgd_fallback();
+    }
     let grains = match reader.iter_allocated_grains() {
         Ok(g) => g,
         Err(e) => return fail(format!("error: {e}")),
@@ -532,7 +540,7 @@ fn main() -> ExitCode {
             descriptor,
             chain,
         } => cmd_info(path, *descriptor, *chain),
-        Command::Map { path } => cmd_map(path),
+        Command::Map { path, recover } => cmd_map(path, *recover),
         Command::Dump {
             path,
             output,
@@ -627,7 +635,7 @@ mod tests {
         assert!(is_success(cmd_info(&p, false, false)));
         assert!(is_success(cmd_info(&p, true, false))); // --descriptor
         assert!(is_success(cmd_info(&p, false, true))); // --chain
-        assert!(is_success(cmd_map(&p)));
+        assert!(is_success(cmd_map(&p, false)));
         assert!(is_success(cmd_hash(&p, false)));
         assert!(is_success(cmd_verify(&p)));
         assert!(is_success(cmd_dump(&p, None, 0, Some(64), false, false))); // stdout range
@@ -637,7 +645,7 @@ mod tests {
 
     #[test]
     fn map_all_sparse_succeeds() {
-        assert!(is_success(cmd_map(&data("minimal.vmdk"))));
+        assert!(is_success(cmd_map(&data("minimal.vmdk"), false)));
     }
 
     #[test]
@@ -655,7 +663,7 @@ mod tests {
             cmd_info(&garbage, false, false),
             cmd_info(&garbage, true, false), // print_descriptor open error
             cmd_info(&garbage, false, true), // chain fallback open error
-            cmd_map(&garbage),
+            cmd_map(&garbage, false),
             cmd_hash(&garbage, false),
             cmd_verify(&garbage),
             cmd_dump(&garbage, None, 0, None, false, false),
@@ -835,7 +843,7 @@ mod tests {
         let p = dir.path().join("dangling.vmdk");
         std::fs::write(&p, opens_but_gt_and_rgd_dangle()).unwrap();
         // open succeeds, but the GT read fails → map errors.
-        assert!(!is_success(cmd_map(&p)), "dangling GT → map error");
+        assert!(!is_success(cmd_map(&p, false)), "dangling GT → map error");
         // validate_rgd + allocation scan both error → verify fails.
         assert!(
             !is_success(cmd_verify(&p)),
