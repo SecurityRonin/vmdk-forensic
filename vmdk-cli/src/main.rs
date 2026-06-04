@@ -696,6 +696,34 @@ mod tests {
     }
 
     #[test]
+    fn dump_recover_reads_through_damaged_primary_gd() {
+        // A VMDK whose primary GD entry is corrupted (out of bounds) but whose RGD and
+        // grain table are intact: `dump` fails by default, but `--recover` resolves the
+        // grain via the redundant grain directory and extracts the data.
+        let dir = tempfile::tempdir().unwrap();
+        let mut vmdk = vmdk::testutil::test_sparse_vmdk(&[0xAB; 512]);
+        let gd = 21 * 512; // primary GD sector
+        vmdk[gd..gd + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        let p = dir.path().join("corrupt.vmdk");
+        std::fs::write(&p, &vmdk).unwrap();
+        let out = dir.path().join("recovered.raw");
+
+        // Without recovery the dangling primary pointer makes the read fail.
+        assert!(
+            !is_success(cmd_dump(&p, Some(&out), 0, Some(512), false, false)),
+            "dump without --recover must fail on the damaged primary GD"
+        );
+
+        // With recovery the grain is read through the RGD.
+        assert!(
+            is_success(cmd_dump(&p, Some(&out), 0, Some(512), false, true)),
+            "dump --recover must extract via the redundant GD"
+        );
+        let data = std::fs::read(&out).unwrap();
+        assert_eq!(&data[..512], &[0xAB; 512], "recovered grain bytes");
+    }
+
+    #[test]
     fn diff_reports_size_and_content_differences() {
         let dir = tempfile::tempdir().unwrap();
         // Different virtual sizes.
