@@ -2848,6 +2848,47 @@ mod tests {
     }
 
     #[test]
+    fn rgd_fallback_recovers_grain_from_corrupt_primary_gd() {
+        // Corrupt the primary GD entry (point it out of bounds) but leave the RGD and
+        // the grain table it references intact. With RGD fallback enabled the grain is
+        // still readable via the redundant directory — recovery qemu-img cannot do.
+        let mut vmdk = test_sparse_vmdk(&[0xAB; 512]);
+        let gd_byte = 21 * 512; // primary GD sector
+        vmdk[gd_byte..gd_byte + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        r.enable_rgd_fallback();
+        let mut buf = [0u8; 512];
+        r.read_exact(&mut buf).expect("resilient read via RGD");
+        assert_eq!(buf, [0xAB; 512], "grain recovered from redundant GD");
+    }
+
+    #[test]
+    fn corrupt_primary_gd_without_fallback_errors() {
+        // Same corruption, but fallback is opt-in: without it the dangling primary
+        // pointer makes the read fail (the safe, unsurprising default).
+        let mut vmdk = test_sparse_vmdk(&[0xAB; 512]);
+        let gd_byte = 21 * 512;
+        vmdk[gd_byte..gd_byte + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let mut buf = [0u8; 512];
+        assert!(
+            r.read_exact(&mut buf).is_err(),
+            "dangling primary GD pointer must error without fallback"
+        );
+    }
+
+    #[test]
+    fn rgd_fallback_is_noop_on_healthy_image() {
+        // Enabling fallback must not change reads on an intact image.
+        let vmdk = test_sparse_vmdk(&[0xAB; 512]);
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        r.enable_rgd_fallback();
+        let mut buf = [0u8; 512];
+        r.read_exact(&mut buf).expect("read healthy image");
+        assert_eq!(buf, [0xAB; 512]);
+    }
+
+    #[test]
     fn info_and_validate_rgd_on_sesparse() {
         let se = test_sesparse_vmdk(&[0u8; 512]);
         let mut r = VmdkReader::open(Cursor::new(se)).expect("open");
