@@ -716,6 +716,26 @@ mod tests {
     }
 
     #[test]
+    fn map_recover_lists_grains_through_damaged_primary_gd() {
+        // The allocation map errors on a damaged primary GD by default; --recover
+        // resolves the grain tables via the redundant GD and lists what it finds.
+        let dir = tempfile::tempdir().unwrap();
+        let mut vmdk = vmdk::testutil::test_sparse_vmdk(&[0xAB; 512]);
+        let gd = 21 * 512;
+        vmdk[gd..gd + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        let p = dir.path().join("corrupt.vmdk");
+        std::fs::write(&p, &vmdk).unwrap();
+        assert!(
+            !is_success(cmd_map(&p, false)),
+            "map without --recover errors on the damaged primary GD"
+        );
+        assert!(
+            is_success(cmd_map(&p, true)),
+            "map --recover lists grains via the redundant GD"
+        );
+    }
+
+    #[test]
     fn hash_recover_succeeds_on_damaged_primary_gd() {
         // Hashing streams the whole disk through the read path, so a damaged primary GD
         // makes `hash` fail by default; with recovery it reads through the RGD and
