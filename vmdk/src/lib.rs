@@ -2963,6 +2963,29 @@ mod tests {
     }
 
     #[test]
+    fn iter_allocated_grains_recovers_via_rgd() {
+        // The allocation scan walks the grain directory directly; a damaged primary GD
+        // pointer errors the scan, but RGD fallback recovers the map via the redundant GD.
+        let mut vmdk = test_sparse_vmdk(&[0xAB; 512]);
+        let gd_byte = 21 * 512;
+        vmdk[gd_byte..gd_byte + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        {
+            let mut r = VmdkReader::open(Cursor::new(vmdk.clone())).expect("open");
+            assert!(
+                r.iter_allocated_grains().is_err(),
+                "dangling primary GD pointer errors the scan without fallback"
+            );
+        }
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        r.enable_rgd_fallback();
+        let grains = r
+            .iter_allocated_grains()
+            .expect("allocation map recovered via RGD");
+        assert_eq!(grains.len(), 1);
+        assert_eq!(grains[0].start_lba, 0);
+    }
+
+    #[test]
     fn rgd_fallback_is_noop_on_healthy_image() {
         // Enabling fallback must not change reads on an intact image.
         let vmdk = test_sparse_vmdk(&[0xAB; 512]);
