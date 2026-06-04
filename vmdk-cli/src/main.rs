@@ -524,6 +524,53 @@ mod tests {
     }
 
     #[test]
+    fn rgd_status_absent_when_no_rgd() {
+        let rec = vmdk::GdRecoveryReport::default(); // has_rgd = false
+        assert!(rgd_status_line(false, &rec).contains("absent or not applicable"));
+    }
+
+    #[test]
+    fn rgd_status_ok_when_matches() {
+        let rec = vmdk::GdRecoveryReport {
+            has_rgd: true,
+            total_entries: 4,
+            primary_intact: 4,
+            ..Default::default()
+        };
+        assert!(rgd_status_line(true, &rec).contains("OK (matches primary GD)"));
+    }
+
+    #[test]
+    fn rgd_status_reports_recoverable_damage() {
+        // Primary GD damaged but the RGD can recover it — the examiner must see this,
+        // not a misleading "absent".
+        let rec = vmdk::GdRecoveryReport {
+            has_rgd: true,
+            total_entries: 5,
+            primary_intact: 3,
+            primary_damaged: 2,
+            recoverable_via_rgd: 2,
+            unrecoverable: 0,
+        };
+        let line = rgd_status_line(false, &rec);
+        assert!(line.contains("2 of 5"), "reports damaged count: {line}");
+        assert!(line.contains("2 recoverable"), "reports recoverable count: {line}");
+    }
+
+    #[test]
+    fn rgd_status_benign_divergence_when_primary_intact() {
+        // RGD present and differs, but every primary entry is usable — benign.
+        let rec = vmdk::GdRecoveryReport {
+            has_rgd: true,
+            total_entries: 4,
+            primary_intact: 4,
+            ..Default::default()
+        };
+        let line = rgd_status_line(false, &rec);
+        assert!(line.contains("primary intact"), "benign divergence: {line}");
+    }
+
+    #[test]
     fn fmt_commas_groups_thousands() {
         assert_eq!(fmt_commas(0), "0");
         assert_eq!(fmt_commas(1024), "1,024");
