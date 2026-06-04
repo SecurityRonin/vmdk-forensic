@@ -152,6 +152,32 @@ pub struct HeaderProvenance {
     pub has_markers: bool,
 }
 
+/// Per-entry recovery analysis of the grain directory against its redundant copy.
+///
+/// Returned by [`VmdkReader::grain_directory_recovery`]. VMDK keeps a redundant
+/// grain directory (RGD) so a damaged primary GD can still be recovered; `qemu-img`
+/// discards the RGD outright, so this analysis is unique to a forensic reader.
+///
+/// `primary_intact + primary_damaged == total_entries`, and
+/// `recoverable_via_rgd + unrecoverable == primary_damaged`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct GdRecoveryReport {
+    /// `true` when the format carries a usable redundant grain directory.
+    pub has_rgd: bool,
+    /// Number of grain-directory entries analysed.
+    pub total_entries: usize,
+    /// Primary entries that are usable as-is (in-bounds, or sparse and agreeing with the RGD).
+    pub primary_intact: usize,
+    /// Primary entries that are damaged: out-of-bounds, or sparse where the RGD still
+    /// holds a valid pointer (a grain-table reference lost from the primary).
+    pub primary_damaged: usize,
+    /// Damaged primary entries the RGD can recover (its entry is in-bounds and non-zero).
+    pub recoverable_via_rgd: usize,
+    /// Damaged primary entries the RGD cannot recover (damaged in both directories).
+    pub unrecoverable: usize,
+}
+
 // ── Internal format dispatch ──────────────────────────────────────────────────
 
 enum FormatState {
@@ -404,6 +430,79 @@ impl<R: Read + Seek> VmdkReader<R> {
         Ok(primary_gd == rgd)
     }
 
+    /// Analyse the primary grain directory against the redundant grain directory (RGD)
+    /// and report which damaged primary entries the RGD can recover.
+    ///
+    /// Unlike [`validate_rgd`](Self::validate_rgd) (a single identical/not-identical
+    /// verdict), this classifies every entry, so a partially-corrupted image can be
+    /// triaged: how much of the primary GD is intact, how much is damaged, and how
+    /// much of the damage the RGD can still recover. `qemu-img` ignores the RGD, so
+    /// this recovery view is unavailable there.
+    ///
+    /// For flat/COWD/seSparse (no RGD) the report has `has_rgd == false` and zeroed counts.
+    pub fn grain_directory_recovery(&mut self) -> io::Result<GdRecoveryReport> {
+        let (primary_gd, num_gtes_per_gt) = match &self.fmt {
+            FormatState::Sparse {
+                grain_dir,
+                num_gtes_per_gt,
+                ..
+            } => (grain_dir.clone(), *num_gtes_per_gt),
+            _ => return Ok(GdRecoveryReport::default()), // Flat/seSparse/COWD have no RGD
+        };
+        let rgd_offset = self.rgd_offset;
+        if rgd_offset == 0 || rgd_offset == crate::header::GD_AT_END {
+            return Ok(GdRecoveryReport::default());
+        }
+        let gd_entry_count = self.gd_entry_count;
+        let file_len = self.inner.seek(SeekFrom::End(0))?;
+
+        // Read the RGD (same width as the primary GD).
+        let rgd_byte_offset = rgd_offset
+            .checked_mul(SECTOR_SIZE)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "rgd_offset overflow"))?;
+        self.inner.seek(SeekFrom::Start(rgd_byte_offset))?;
+        let mut rgd_bytes = vec![0u8; gd_entry_count * 4];
+        self.inner.read_exact(&mut rgd_bytes)?;
+        let rgd: Vec<u32> = rgd_bytes
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes(c.try_into().expect("4 bytes")))
+            .collect();
+
+        // A grain-table pointer is usable when it is non-zero and the full grain table
+        // it points at lies within the file.
+        let gt_byte_len = num_gtes_per_gt * 4;
+        let in_bounds = |ptr: u32| -> bool {
+            ptr != 0
+                && u64::from(ptr)
+                    .saturating_mul(SECTOR_SIZE)
+                    .saturating_add(gt_byte_len)
+                    <= file_len
+        };
+
+        let mut report = GdRecoveryReport {
+            has_rgd: true,
+            total_entries: gd_entry_count,
+            ..GdRecoveryReport::default()
+        };
+        for i in 0..gd_entry_count {
+            let p = primary_gd.get(i).copied().unwrap_or(0);
+            let r = rgd.get(i).copied().unwrap_or(0);
+            if in_bounds(p) || (p == 0 && r == 0) {
+                // Primary is directly usable, or both agree the region is sparse.
+                report.primary_intact += 1;
+            } else {
+                // Out-of-bounds pointer, or a sparse primary entry where the RGD still
+                // holds a pointer (a reference lost from the primary).
+                report.primary_damaged += 1;
+                if in_bounds(r) {
+                    report.recoverable_via_rgd += 1;
+                } else {
+                    report.unrecoverable += 1;
+                }
+            }
+        }
+        Ok(report)
+    }
 
     /// Walk the grain directory and tables, counting pointers that fall beyond
     /// end-of-file (the signature of a truncated or tampered image).
