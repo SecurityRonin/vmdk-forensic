@@ -73,6 +73,9 @@ enum Command {
         /// Render as a hex dump (offset | hex bytes | ASCII) instead of raw bytes
         #[arg(long)]
         hex: bool,
+        /// Recover via the redundant grain directory when the primary GD is damaged
+        #[arg(long)]
+        recover: bool,
     },
 
     /// Compute SHA-256 and MD5 of the full virtual disk (one streaming pass)
@@ -244,11 +247,17 @@ fn cmd_dump(
     offset: u64,
     length: Option<u64>,
     hex: bool,
+    recover: bool,
 ) -> ExitCode {
     let mut reader = match open(path) {
         Ok(r) => r,
         Err(m) => return fail(m),
     };
+    if recover {
+        // Resolve grains through the redundant grain directory when the primary GD
+        // entry is damaged — recovers data qemu-img would fail on.
+        reader.enable_rgd_fallback();
+    }
     let disk_size = reader.virtual_disk_size();
     let end = length.map_or(disk_size, |len| offset.saturating_add(len).min(disk_size));
     let to_output = end.saturating_sub(offset);
@@ -522,7 +531,8 @@ fn main() -> ExitCode {
             offset,
             length,
             hex,
-        } => cmd_dump(path, output.as_deref(), *offset, *length, *hex),
+            recover,
+        } => cmd_dump(path, output.as_deref(), *offset, *length, *hex, *recover),
         Command::Hash { path } => cmd_hash(path),
         Command::Verify { path } => cmd_verify(path),
         Command::Diff { a, b } => cmd_diff(a, b),
@@ -612,8 +622,8 @@ mod tests {
         assert!(is_success(cmd_map(&p)));
         assert!(is_success(cmd_hash(&p)));
         assert!(is_success(cmd_verify(&p)));
-        assert!(is_success(cmd_dump(&p, None, 0, Some(64), false))); // stdout range
-        assert!(is_success(cmd_dump(&p, None, 1024, Some(20), true))); // hex partial row
+        assert!(is_success(cmd_dump(&p, None, 0, Some(64), false, false))); // stdout range
+        assert!(is_success(cmd_dump(&p, None, 1024, Some(20), true, false))); // hex partial row
         assert!(is_success(cmd_diff(&p, &p))); // identical
     }
 
@@ -640,7 +650,7 @@ mod tests {
             cmd_map(&garbage),
             cmd_hash(&garbage),
             cmd_verify(&garbage),
-            cmd_dump(&garbage, None, 0, None, false),
+            cmd_dump(&garbage, None, 0, None, false, false),
             cmd_diff(&garbage, &garbage),
         ] {
             assert!(!is_success(code), "garbage input must fail");
@@ -656,6 +666,7 @@ mod tests {
             Some(&ok),
             0,
             None,
+            false,
             false
         )));
         assert_eq!(std::fs::metadata(&ok).unwrap().len(), 1_048_576);
@@ -666,6 +677,7 @@ mod tests {
             Some(bad),
             0,
             None,
+            false,
             false
         )));
     }
