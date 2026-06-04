@@ -708,6 +708,27 @@ mod tests {
     }
 
     #[test]
+    fn hash_recover_succeeds_on_damaged_primary_gd() {
+        // Hashing streams the whole disk through the read path, so a damaged primary GD
+        // makes `hash` fail by default; with recovery it reads through the RGD and
+        // completes — letting an examiner fingerprint a recovered image.
+        let dir = tempfile::tempdir().unwrap();
+        let mut vmdk = vmdk::testutil::test_sparse_vmdk(&[0xAB; 512]);
+        let gd = 21 * 512;
+        vmdk[gd..gd + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        let p = dir.path().join("corrupt.vmdk");
+        std::fs::write(&p, &vmdk).unwrap();
+        assert!(
+            !is_success(cmd_hash(&p, false)),
+            "hash without --recover must fail on the damaged primary GD"
+        );
+        assert!(
+            is_success(cmd_hash(&p, true)),
+            "hash --recover must complete via the redundant GD"
+        );
+    }
+
+    #[test]
     fn dump_recover_reads_through_damaged_primary_gd() {
         // A VMDK whose primary GD entry is corrupted (out of bounds) but whose RGD and
         // grain table are intact: `dump` fails by default, but `--recover` resolves the
