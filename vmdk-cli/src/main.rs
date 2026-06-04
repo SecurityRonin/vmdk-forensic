@@ -79,7 +79,12 @@ enum Command {
     },
 
     /// Compute SHA-256 and MD5 of the full virtual disk (one streaming pass)
-    Hash { path: PathBuf },
+    Hash {
+        path: PathBuf,
+        /// Recover via the redundant grain directory when the primary GD is damaged
+        #[arg(long)]
+        recover: bool,
+    },
 
     /// Verify structural integrity: RGD validation + allocation scan
     Verify { path: PathBuf },
@@ -358,11 +363,14 @@ fn dump_hex<R: Read>(reader: &mut R, start_offset: u64, length: u64) -> io::Resu
 
 // ── hash ──────────────────────────────────────────────────────────────────────
 
-fn cmd_hash(path: &std::path::Path) -> ExitCode {
+fn cmd_hash(path: &std::path::Path, recover: bool) -> ExitCode {
     let mut reader = match open(path) {
         Ok(r) => r,
         Err(m) => return fail(m),
     };
+    if recover {
+        reader.enable_rgd_fallback();
+    }
     reader.seek(SeekFrom::Start(0)).ok();
     let digest = match reader.hash() {
         Ok(d) => d,
@@ -533,7 +541,7 @@ fn main() -> ExitCode {
             hex,
             recover,
         } => cmd_dump(path, output.as_deref(), *offset, *length, *hex, *recover),
-        Command::Hash { path } => cmd_hash(path),
+        Command::Hash { path, recover } => cmd_hash(path, *recover),
         Command::Verify { path } => cmd_verify(path),
         Command::Diff { a, b } => cmd_diff(a, b),
     }
@@ -620,7 +628,7 @@ mod tests {
         assert!(is_success(cmd_info(&p, true, false))); // --descriptor
         assert!(is_success(cmd_info(&p, false, true))); // --chain
         assert!(is_success(cmd_map(&p)));
-        assert!(is_success(cmd_hash(&p)));
+        assert!(is_success(cmd_hash(&p, false)));
         assert!(is_success(cmd_verify(&p)));
         assert!(is_success(cmd_dump(&p, None, 0, Some(64), false, false))); // stdout range
         assert!(is_success(cmd_dump(&p, None, 1024, Some(20), true, false))); // hex partial row
@@ -648,7 +656,7 @@ mod tests {
             cmd_info(&garbage, true, false), // print_descriptor open error
             cmd_info(&garbage, false, true), // chain fallback open error
             cmd_map(&garbage),
-            cmd_hash(&garbage),
+            cmd_hash(&garbage, false),
             cmd_verify(&garbage),
             cmd_dump(&garbage, None, 0, None, false, false),
             cmd_diff(&garbage, &garbage),
