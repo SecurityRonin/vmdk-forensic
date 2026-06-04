@@ -1140,6 +1140,30 @@ impl<R: Read + Seek> VmdkReader<R> {
         Ok(u32::from_le_bytes(b))
     }
 
+    /// Read grain-table entry `gte_idx` from the redundant grain table referenced by
+    /// RGD entry `gd_idx`, or 0 if the RGD entry or the target entry is out of bounds.
+    /// Used for content-level recovery when a primary GT entry has been lost.
+    fn rgd_gte(&mut self, gd_idx: usize, gte_idx: u64, num_gtes_per_gt: u64) -> io::Result<u32> {
+        let file_len = self.inner.seek(SeekFrom::End(0))?;
+        let rgd_gt_sector = self.rgd_dir_entry(gd_idx, file_len)?;
+        if rgd_gt_sector == 0 {
+            return Ok(0);
+        }
+        let gt_byte = u64::from(rgd_gt_sector) * SECTOR_SIZE;
+        let gt_byte_len = num_gtes_per_gt * 4;
+        if gt_byte.saturating_add(gt_byte_len) > file_len {
+            return Ok(0);
+        }
+        let entry_byte = gt_byte + gte_idx * 4;
+        if entry_byte.saturating_add(4) > file_len {
+            return Ok(0);
+        }
+        self.inner.seek(SeekFrom::Start(entry_byte))?;
+        let mut b = [0u8; 4];
+        self.inner.read_exact(&mut b)?;
+        Ok(u32::from_le_bytes(b))
+    }
+
     /// Resolve `virtual_offset` to a [`GrainLookup`] describing where to find the data.
     fn grain_location(&mut self, virtual_offset: u64) -> io::Result<GrainLookup> {
         // Dispatch seSparse separately: nibble-typed, bit-rotated 8-byte grain entries.
@@ -1243,6 +1267,19 @@ impl<R: Read + Seek> VmdkReader<R> {
                 .collect();
             let gte = gt.get(gte_idx as usize).copied().unwrap_or(0);
             self.gt_cache.insert(gt_sector, gt);
+            gte
+        };
+        // Content-level recovery: the primary grain-table pointer was usable but this
+        // entry is sparse — if the redundant grain table still holds the grain pointer,
+        // the primary entry was lost to corruption, so recover it.
+        let gte = if self.rgd_fallback && gte <= 1 {
+            let rgd_gte = self.rgd_gte(gd_idx, gte_idx, num_gtes_per_gt)?;
+            if rgd_gte > 1 {
+                rgd_gte
+            } else {
+                gte
+            }
+        } else {
             gte
         };
         if gte <= 1 {
@@ -3021,7 +3058,10 @@ mod tests {
         let mut r = VmdkReader::open(Cursor::new(vmdk.clone())).expect("open");
         let mut buf = [0xFFu8; 512];
         r.read_exact(&mut buf).expect("read");
-        assert_eq!(buf, [0u8; 512], "lost primary GTE reads sparse without recovery");
+        assert_eq!(
+            buf, [0u8; 512],
+            "lost primary GTE reads sparse without recovery"
+        );
         // With fallback the grain is recovered from the redundant grain table.
         let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
         r.enable_rgd_fallback();
