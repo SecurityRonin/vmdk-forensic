@@ -404,6 +404,7 @@ impl<R: Read + Seek> VmdkReader<R> {
         Ok(primary_gd == rgd)
     }
 
+
     /// Walk the grain directory and tables, counting pointers that fall beyond
     /// end-of-file (the signature of a truncated or tampered image).
     ///
@@ -2621,6 +2622,48 @@ mod tests {
         let vmdk = testutil::test_sparse_vmdk_with_descriptor(&[0u8; 512], desc);
         let r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
         assert_eq!(r.effective_content_id(), "12345678");
+    }
+
+    #[test]
+    fn grain_directory_recovery_recoverable_via_rgd() {
+        // Corrupt the primary GD entry (point it far out of bounds) but leave the
+        // redundant GD intact — the recovery report should flag it as RGD-recoverable.
+        // The fixture writes the primary GD at sector 21 (byte 21*512).
+        let mut vmdk = testutil::test_sparse_vmdk(&[0xAB; 512]);
+        let gd_byte = 21 * 512;
+        vmdk[gd_byte..gd_byte + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let rep = r.grain_directory_recovery().expect("recovery report");
+        assert!(rep.has_rgd, "monolithicSparse carries an RGD");
+        assert_eq!(rep.total_entries, 1);
+        assert_eq!(rep.primary_intact, 0);
+        assert_eq!(rep.primary_damaged, 1);
+        assert_eq!(rep.recoverable_via_rgd, 1);
+        assert_eq!(rep.unrecoverable, 0);
+    }
+
+    #[test]
+    fn grain_directory_recovery_clean_image_all_intact() {
+        let vmdk = testutil::test_sparse_vmdk(&[0xAB; 512]);
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let rep = r.grain_directory_recovery().expect("recovery report");
+        assert!(rep.has_rgd);
+        assert_eq!(rep.total_entries, 1);
+        assert_eq!(rep.primary_intact, 1);
+        assert_eq!(rep.primary_damaged, 0);
+        assert_eq!(rep.recoverable_via_rgd, 0);
+        assert_eq!(rep.unrecoverable, 0);
+    }
+
+    #[test]
+    fn grain_directory_recovery_absent_for_sesparse() {
+        // seSparse has no redundant grain directory.
+        let se = test_sesparse_vmdk(&[0u8; 512]);
+        let mut r = VmdkReader::open(Cursor::new(se)).expect("open");
+        let rep = r.grain_directory_recovery().expect("recovery report");
+        assert!(!rep.has_rgd);
+        assert_eq!(rep.total_entries, 0);
+        assert_eq!(rep.primary_damaged, 0);
     }
 
     #[test]
