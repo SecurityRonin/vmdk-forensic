@@ -249,10 +249,21 @@ fn cmd_map(path: &std::path::Path, recover: bool) -> ExitCode {
         println!("{},{}", g.start_lba, g.sector_count);
     }
     eprintln!("{} allocated grain(s)", grains.len());
+    if recover {
+        if let Some(note) = recovery_note(reader.rgd_recovery_count()) {
+            eprintln!("{note}");
+        }
+    }
     ExitCode::SUCCESS
 }
 
 // ── dump ──────────────────────────────────────────────────────────────────────
+
+/// Summary line printed after a `--recover` operation: how many grains were resolved
+/// via the redundant grain directory. `None` when nothing needed recovery.
+fn recovery_note(count: u64) -> Option<String> {
+    (count > 0).then(|| format!("Recovered {count} grain(s) via the redundant grain directory"))
+}
 
 fn cmd_dump(
     path: &std::path::Path,
@@ -281,7 +292,14 @@ fn cmd_dump(
 
     if hex {
         return match dump_hex(&mut reader, offset, to_output) {
-            Ok(()) => ExitCode::SUCCESS,
+            Ok(()) => {
+                if recover {
+                    if let Some(note) = recovery_note(reader.rgd_recovery_count()) {
+                        eprintln!("{note}");
+                    }
+                }
+                ExitCode::SUCCESS
+            }
             Err(e) => fail(format!("read error: {e}")),
         };
     }
@@ -309,6 +327,11 @@ fn cmd_dump(
             return fail(format!("write error: {e}"));
         }
         w.flush().ok();
+    }
+    if recover {
+        if let Some(note) = recovery_note(reader.rgd_recovery_count()) {
+            eprintln!("{note}");
+        }
     }
     ExitCode::SUCCESS
 }
@@ -387,6 +410,11 @@ fn cmd_hash(path: &std::path::Path, recover: bool) -> ExitCode {
     println!("SHA-256: {}", digest.sha256);
     println!("MD5:     {}", digest.md5);
     println!("File:    {}", path.display());
+    if recover {
+        if let Some(note) = recovery_note(reader.rgd_recovery_count()) {
+            eprintln!("{note}");
+        }
+    }
     ExitCode::SUCCESS
 }
 
@@ -574,14 +602,20 @@ mod tests {
 
     #[test]
     fn recovery_note_none_when_zero() {
-        assert!(recovery_note(0).is_none(), "no note when nothing was recovered");
+        assert!(
+            recovery_note(0).is_none(),
+            "no note when nothing was recovered"
+        );
     }
 
     #[test]
     fn recovery_note_reports_count() {
         let n = recovery_note(3).expect("note for non-zero count");
         assert!(n.contains('3'), "reports the count: {n}");
-        assert!(n.to_lowercase().contains("redundant"), "mentions the RGD: {n}");
+        assert!(
+            n.to_lowercase().contains("redundant"),
+            "mentions the RGD: {n}"
+        );
     }
 
     #[test]
