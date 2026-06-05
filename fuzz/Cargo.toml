@@ -15,6 +15,18 @@ path  = "fuzz_targets/fuzz_open.rs"
 test  = false
 doc   = false
 
+[[bin]]
+name  = "fuzz_read"
+path  = "fuzz_targets/fuzz_read.rs"
+test  = false
+doc   = false
+
+[[bin]]
+name  = "fuzz_recover"
+path  = "fuzz_targets/fuzz_recover.rs"
+test  = false
+doc   = false
+
 [dependencies]
 libfuzzer-sys = "0.4"
 vmdk          = { path = "../vmdk" }

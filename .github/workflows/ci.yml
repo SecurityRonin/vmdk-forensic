@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
@@ -68,8 +71,8 @@ jobs:
       - name: Run real-world image tests (data committed to repo)
         run: cargo test --test real_images --test synthetic -- --nocapture
 
-  fuzz-check:
-    name: Fuzz (build check)
+  fuzz:
+    name: Fuzz (smoke)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -79,6 +82,15 @@ jobs:
           components: rust-src
       - run: cargo install cargo-fuzz
       - run: cargo fuzz build
+      # Seed each corpus with the committed real-world images, then fuzz briefly. Any
+      # crash on crafted/corrupted input fails the build.
+      - name: Smoke-fuzz every target (seeded)
+        run: |
+          for t in fuzz_open fuzz_read fuzz_recover; do
+            mkdir -p "fuzz/corpus/$t"
+            cp vmdk/tests/data/*.vmdk "fuzz/corpus/$t/" 2>/dev/null || true
+            cargo fuzz run "$t" -- -max_total_time=45 -rss_limit_mb=4096
+          done
 
   secrets:
     name: Secret Scan (gitleaks)
