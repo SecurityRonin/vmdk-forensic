@@ -196,6 +196,24 @@ mod tests {
     }
 
     #[test]
+    fn parses_bios_geometry() {
+        let db = DiskDatabase::parse(
+            "ddb.geometry.biosCylinders = \"100\"\nddb.geometry.biosHeads = \"8\"\nddb.geometry.biosSectors = \"32\"\n",
+        );
+        let g = db.bios_geometry.expect("bios geometry present");
+        assert_eq!(g.cylinders, 100);
+        assert_eq!(g.heads, 8);
+        assert_eq!(g.sectors, 32);
+    }
+
+    #[test]
+    fn ddb_line_without_equals_is_skipped() {
+        // A malformed `ddb.` line with no `=` is skipped, not an error.
+        let db = DiskDatabase::parse("ddb.brokenline\nddb.adapterType = \"ide\"\n");
+        assert_eq!(db.adapter_type.as_deref(), Some("ide"));
+    }
+
+    #[test]
     fn partial_geometry_is_ignored() {
         // Geometry requires all three of cylinders/heads/sectors.
         let db =

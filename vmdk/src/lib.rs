@@ -3279,6 +3279,65 @@ mod tests {
     }
 
     #[test]
+    fn validate_rgd_both_sparse_entries_match() {
+        // Both the primary GD[0] and RGD[0] are zero — they agree the region is sparse.
+        let mut vmdk = test_sparse_vmdk(&[0u8; 512]);
+        vmdk[21 * 512..21 * 512 + 4].copy_from_slice(&0u32.to_le_bytes());
+        vmdk[22 * 512..22 * 512 + 4].copy_from_slice(&0u32.to_le_bytes());
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        assert!(
+            r.validate_rgd().expect("validate"),
+            "both-sparse entries match"
+        );
+    }
+
+    #[test]
+    fn validate_rgd_mismatch_when_only_one_has_grain_table() {
+        // Primary GD[0] sparse, RGD[0] has a grain table → mismatch.
+        let mut vmdk = test_sparse_vmdk(&[0u8; 512]);
+        vmdk[21 * 512..21 * 512 + 4].copy_from_slice(&0u32.to_le_bytes());
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        assert!(
+            !r.validate_rgd().expect("validate"),
+            "one-sided GT is a mismatch"
+        );
+    }
+
+    #[test]
+    fn grain_directory_recovery_default_when_no_rgd_offset() {
+        let mut vmdk = test_sparse_vmdk(&[0u8; 512]);
+        vmdk[48..56].copy_from_slice(&0u64.to_le_bytes()); // rgd_offset = 0
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let rep = r.grain_directory_recovery().expect("recovery");
+        assert!(!rep.has_rgd);
+        assert_eq!(rep.total_entries, 0);
+    }
+
+    #[test]
+    fn grain_directory_recovery_counts_unrecoverable() {
+        // Both primary and redundant GD[0] are out of bounds — damaged in both.
+        let mut vmdk = test_sparse_vmdk(&[0u8; 512]);
+        vmdk[21 * 512..21 * 512 + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        vmdk[22 * 512..22 * 512 + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let rep = r.grain_directory_recovery().expect("recovery");
+        assert_eq!(rep.primary_damaged, 1);
+        assert_eq!(rep.recoverable_via_rgd, 0);
+        assert_eq!(rep.unrecoverable, 1);
+    }
+
+    #[test]
+    fn open_rejects_capacity_overflow() {
+        // capacity * 512 overflows u64 → InvalidGeometry rather than a panic.
+        let mut vmdk = test_sparse_vmdk(&[0u8; 512]);
+        vmdk[12..20].copy_from_slice(&u64::MAX.to_le_bytes());
+        match VmdkReader::open(Cursor::new(vmdk)) {
+            Err(VmdkError::InvalidGeometry(_)) => {}
+            other => panic!("expected InvalidGeometry, got ok={}", other.is_ok()),
+        }
+    }
+
+    #[test]
     fn rgd_fallback_is_noop_on_healthy_image() {
         // Enabling fallback must not change reads on an intact image.
         let vmdk = test_sparse_vmdk(&[0xAB; 512]);
