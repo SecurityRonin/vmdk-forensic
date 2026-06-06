@@ -386,6 +386,54 @@ pub fn compressed_vmdk_with_oversized_marker(marker_data_size: u32) -> Vec<u8> {
     vmdk
 }
 
+/// Build a streamOptimized VMDK whose single grain's zlib payload decompresses
+/// to `decompressed_len` bytes. When that exceeds the 64 KiB grain size it is a
+/// decompression bomb: a correct reader must refuse it rather than allocate the
+/// full expansion. The compressed payload (zlib of zeros) is tiny, so it clears
+/// any compressed-size cap and the defense must fire on the *decompressed* side.
+#[cfg_attr(not(any(test, feature = "test-helpers")), allow(dead_code))]
+pub fn compressed_vmdk_with_bomb_grain(decompressed_len: usize) -> Vec<u8> {
+    use std::io::Write as _;
+    let payload = {
+        let mut enc =
+            flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        enc.write_all(&vec![0u8; decompressed_len]).expect("compress");
+        enc.finish().expect("finish")
+    };
+
+    let marker = COM_GRAIN_SECTOR as usize * SECTOR_SIZE as usize;
+    let total = marker + COM_MARKER_BYTES + payload.len();
+    let mut vmdk = vec![0u8; total];
+
+    {
+        let h = &mut vmdk[0..512];
+        h[0..4].copy_from_slice(&MAGIC.to_le_bytes());
+        h[4..8].copy_from_slice(&VERSION_STREAM_OPT.to_le_bytes());
+        h[12..20].copy_from_slice(&COM_CAPACITY.to_le_bytes());
+        h[20..28].copy_from_slice(&COM_GRAIN_SIZE.to_le_bytes());
+        h[44..48].copy_from_slice(&COM_NUM_GTES.to_le_bytes());
+        h[56..64].copy_from_slice(&COM_GD_SECTOR.to_le_bytes());
+        h[64..72].copy_from_slice(&COM_GRAIN_SECTOR.to_le_bytes());
+        h[73] = b'\n';
+        h[74] = b' ';
+        h[75] = b'\r';
+        h[76] = b'\n';
+        h[77..79].copy_from_slice(&1u16.to_le_bytes());
+    }
+
+    let gd = COM_GD_SECTOR as usize * SECTOR_SIZE as usize;
+    vmdk[gd..gd + 4].copy_from_slice(&(COM_GT_SECTOR as u32).to_le_bytes());
+    let gt = COM_GT_SECTOR as usize * SECTOR_SIZE as usize;
+    vmdk[gt..gt + 4].copy_from_slice(&(COM_GRAIN_SECTOR as u32).to_le_bytes());
+
+    // GrainMarker: lba=0, data_size = compressed length; the zlib payload follows.
+    vmdk[marker + 8..marker + 12].copy_from_slice(&(payload.len() as u32).to_le_bytes());
+    vmdk[marker + COM_MARKER_BYTES..marker + COM_MARKER_BYTES + payload.len()]
+        .copy_from_slice(&payload);
+
+    vmdk
+}
+
 /// Build a streamOptimized VMDK where the primary header carries `GD_AT_END`
 /// (`gdOffset = u64::MAX`) and the real GD is referenced by the footer header
 /// pinned at `file_end − 1024`.

@@ -2500,6 +2500,21 @@ mod tests {
     }
 
     #[test]
+    fn compressed_grain_decompressing_past_grain_size_is_refused() {
+        // A streamOptimized grain whose zlib payload expands far beyond the grain
+        // size is a decompression bomb; reading it must error rather than
+        // materialize the full expansion in memory.
+        use std::io::Read as _;
+        let vmdk = crate::testutil::compressed_vmdk_with_bomb_grain(4 * 1024 * 1024);
+        let mut r = VmdkReader::open(Cursor::new(vmdk)).expect("open");
+        let mut buf = [0u8; 512];
+        assert!(
+            r.read(&mut buf).is_err(),
+            "a grain that decompresses beyond its grain size must be refused"
+        );
+    }
+
+    #[test]
     fn descriptor_extent_path_cannot_escape_image_directory() {
         // A crafted descriptor must not be able to read files outside the image
         // directory via an absolute or `..`-climbing extent path.
