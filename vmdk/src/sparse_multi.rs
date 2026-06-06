@@ -32,7 +32,7 @@ impl MultiSparseReader {
         let mut byte_offset = 0u64;
 
         for entry in entries {
-            let path = dir.join(entry.filename.as_ref());
+            let path = crate::descriptor::resolve_extent_path(dir, entry.filename.as_ref())?;
             let mut file = BufReader::new(File::open(&path)?);
 
             let mut hdr_bytes = [0u8; 512];

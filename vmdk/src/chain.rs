@@ -70,15 +70,10 @@ impl VmdkChainReader {
             if parent_hint.is_empty() {
                 break; // no hint available — treat as base
             }
-            let parent_path = if Path::new(parent_hint).is_absolute() {
-                std::path::PathBuf::from(parent_hint)
-            } else {
-                current_path
-                    .parent()
-                    .unwrap_or(Path::new("."))
-                    .join(parent_hint)
-            };
-            current_path = parent_path;
+            // Resolve the parent strictly within the current file's directory —
+            // an absolute or `..`-climbing parentFileNameHint is refused.
+            let parent_dir = current_path.parent().unwrap_or(Path::new("."));
+            current_path = crate::descriptor::resolve_extent_path(parent_dir, parent_hint)?;
         }
 
         let virtual_disk_size = layers
@@ -263,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn chain_resolves_absolute_parent_hint() {
+    fn chain_refuses_absolute_parent_hint() {
         let dir = tempfile::tempdir().unwrap();
         let base = crate::testutil::test_sparse_vmdk_with_descriptor(
             &[0x55u8; 512],
@@ -278,8 +273,12 @@ mod tests {
         let delta = crate::testutil::test_sparse_vmdk_with_descriptor(&[0u8; 512], &delta_desc);
         let delta_path = dir.path().join("delta.vmdk");
         std::fs::write(&delta_path, &delta).unwrap();
-        let chain = VmdkChainReader::open(&delta_path).expect("absolute hint resolves");
-        assert_eq!(chain.depth(), 2, "absolute parent hint must add a layer");
+        // An absolute parentFileNameHint is a crafted-image attempt to read an
+        // arbitrary host file; the chain reader must refuse it (secure by default).
+        assert!(
+            VmdkChainReader::open(&delta_path).is_err(),
+            "an absolute parentFileNameHint must be refused"
+        );
     }
 
     #[test]

@@ -1,6 +1,28 @@
 //! Text VMDK descriptor parsing (Virtual Disk Format 1.1 §4.3).
 
+use std::io;
+use std::path::{Component, Path, PathBuf};
+
 use crate::error::{Result, VmdkError};
+
+/// Resolve a descriptor-controlled extent/parent filename against `base_dir`,
+/// refusing any path that escapes that directory (absolute, root/prefix, or a
+/// `..` component). VMDK descriptors reference sibling files by design; a path
+/// that climbs out is a crafted-image attempt to read arbitrary host files, so
+/// the safe default is to refuse it.
+pub(crate) fn resolve_extent_path(base_dir: &Path, filename: &str) -> io::Result<PathBuf> {
+    let rel = Path::new(filename);
+    let escapes = rel.components().any(|c| {
+        matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_))
+    });
+    if escapes {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("refusing descriptor-controlled path that escapes the image directory: {filename}"),
+        ));
+    }
+    Ok(base_dir.join(rel))
+}
 
 /// Parsed text VMDK descriptor.
 pub(crate) struct TextDescriptor {

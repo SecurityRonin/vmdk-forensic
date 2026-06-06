@@ -34,7 +34,7 @@ impl MultiExtentReader {
             let file = if ext.is_zero {
                 None
             } else {
-                let path = base_dir.join(ext.filename.as_ref());
+                let path = crate::descriptor::resolve_extent_path(base_dir, ext.filename.as_ref())?;
                 Some(BufReader::new(File::open(&path).map_err(|e| {
                     io::Error::new(e.kind(), format!("{}: {e}", path.display()))
                 })?))
