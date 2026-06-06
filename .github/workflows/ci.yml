@@ -86,7 +86,7 @@ jobs:
       # crash on crafted/corrupted input fails the build.
       - name: Smoke-fuzz every target (seeded)
         run: |
-          for t in fuzz_open fuzz_read fuzz_recover; do
+          for t in fuzz_open fuzz_read fuzz_recover fuzz_forensic; do
             mkdir -p "fuzz/corpus/$t"
             cp vmdk/tests/data/*.vmdk "fuzz/corpus/$t/" 2>/dev/null || true
             cargo fuzz run "$t" -- -max_total_time=45 -rss_limit_mb=4096

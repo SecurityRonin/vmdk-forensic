@@ -574,7 +574,7 @@ impl<R: Read + Seek> VmdkIntegrity<R> {
 mod tests {
     use super::*;
     use std::io::Cursor;
-    use vmdk::testutil::test_sparse_vmdk;
+    use vmdk::testutil::{test_sesparse_vmdk, test_sparse_vmdk};
 
     #[test]
     fn header_provenance_clean_image() {
@@ -639,6 +639,145 @@ mod tests {
                 .any(|x| matches!(x.kind, AnomalyKind::RedundantGdMismatch)),
             "expected an RGD mismatch anomaly, got: {anomalies:?}"
         );
+    }
+
+    #[test]
+    fn into_inner_returns_reader() {
+        let v = test_sparse_vmdk(&[0u8; 512]);
+        let a = VmdkIntegrity::new(Cursor::new(v));
+        let _cursor = a.into_inner();
+    }
+
+    #[test]
+    fn header_provenance_flags_unclean_shutdown_and_ftp_mangling() {
+        let mut v = test_sparse_vmdk(&[0u8; 512]);
+        v[72] = 1; // uncleanShutdown
+        v[73] = 0x20; // break the 0A 20 0D 0A newline-detection sequence
+        let mut a = VmdkIntegrity::new(Cursor::new(v));
+        let p = a.header_provenance().expect("io").expect("vmdk4");
+        assert!(p.unclean_shutdown);
+        assert!(!p.newline_check_intact);
+    }
+
+    #[test]
+    fn header_provenance_none_for_non_vmdk4() {
+        let mut a = VmdkIntegrity::new(Cursor::new(vec![0u8; 1024]));
+        assert!(a.header_provenance().expect("io").is_none());
+    }
+
+    #[test]
+    fn validate_rgd_false_for_sesparse() {
+        let se = test_sesparse_vmdk(&[0u8; 512]);
+        let mut a = VmdkIntegrity::new(Cursor::new(se));
+        assert!(!a.validate_rgd().expect("io")); // no RGD in seSparse
+    }
+
+    #[test]
+    fn grain_directory_recovery_default_when_no_rgd() {
+        let mut v = test_sparse_vmdk(&[0u8; 512]);
+        v[48..56].copy_from_slice(&0u64.to_le_bytes()); // rgd_offset = 0
+        let mut a = VmdkIntegrity::new(Cursor::new(v));
+        let r = a.grain_directory_recovery().expect("io");
+        assert!(!r.has_rgd);
+        assert_eq!(r.total_entries, 0);
+    }
+
+    #[test]
+    fn grain_directory_recovery_counts_unrecoverable() {
+        let mut v = test_sparse_vmdk(&[0u8; 512]);
+        v[21 * 512..21 * 512 + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes()); // primary GD[0]
+        v[22 * 512..22 * 512 + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes()); // RGD[0]
+        let mut a = VmdkIntegrity::new(Cursor::new(v));
+        let r = a.grain_directory_recovery().expect("io");
+        assert_eq!(r.primary_damaged, 1);
+        assert_eq!(r.unrecoverable, 1);
+        assert_eq!(r.recoverable_via_rgd, 0);
+    }
+
+    #[test]
+    fn grain_directory_recovery_clean_all_intact() {
+        let v = test_sparse_vmdk(&[0xAB; 512]);
+        let mut a = VmdkIntegrity::new(Cursor::new(v));
+        let r = a.grain_directory_recovery().expect("io");
+        assert!(r.has_rgd);
+        assert_eq!(r.primary_intact, r.total_entries);
+        assert_eq!(r.primary_damaged, 0);
+    }
+
+    #[test]
+    fn sesparse_integrity_clean_and_flagged() {
+        // Clean seSparse: no out-of-bounds pointers.
+        let se = test_sesparse_vmdk(&[0xAB; 512]);
+        let mut a = VmdkIntegrity::new(Cursor::new(se));
+        assert!(a.check_integrity().expect("io").is_ok());
+
+        // Invalid GD allocation marker → flagged grain table.
+        let mut se2 = test_sesparse_vmdk(&[0xAB; 512]);
+        let gd = 2 * 512;
+        se2[gd..gd + 8].copy_from_slice(&0x5000_0000_0000_0000u64.to_le_bytes());
+        let mut a2 = VmdkIntegrity::new(Cursor::new(se2));
+        let rep = a2.check_integrity().expect("io");
+        assert!(!rep.is_ok());
+        assert_eq!(rep.out_of_bounds_grain_tables, 1);
+
+        // Allocated marker pointing to a grain table past EOF → flagged.
+        let mut se3 = test_sesparse_vmdk(&[0xAB; 512]);
+        se3[gd..gd + 8].copy_from_slice(&(0x1000_0000_0000_0000u64 | 0xFFFF_FFFF).to_le_bytes());
+        let mut a3 = VmdkIntegrity::new(Cursor::new(se3));
+        assert!(!a3.check_integrity().expect("io").is_ok());
+    }
+
+    #[test]
+    fn check_integrity_flags_grain_past_eof() {
+        // Point a primary GT entry at a grain past EOF (GT at sector 23, GTE[0]).
+        let mut v = test_sparse_vmdk(&[0xAB; 512]);
+        v[23 * 512..23 * 512 + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        let mut a = VmdkIntegrity::new(Cursor::new(v));
+        let rep = a.check_integrity().expect("io");
+        assert_eq!(rep.out_of_bounds_grains, 1);
+        assert!(!rep.is_ok());
+    }
+
+    #[test]
+    fn analyse_flags_unclean_shutdown_warning() {
+        let mut v = test_sparse_vmdk(&[0u8; 512]);
+        v[72] = 1;
+        let mut a = VmdkIntegrity::new(Cursor::new(v));
+        let anomalies = a.analyse().expect("io");
+        assert!(anomalies
+            .iter()
+            .any(|x| matches!(x.kind, AnomalyKind::UncleanShutdown)));
+    }
+
+    #[test]
+    fn analyse_flags_dangling_and_recoverable_for_corrupt_primary_gd() {
+        let mut v = test_sparse_vmdk(&[0xAB; 512]);
+        v[21 * 512..21 * 512 + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        let mut a = VmdkIntegrity::new(Cursor::new(v));
+        let k: Vec<_> = a
+            .analyse()
+            .expect("io")
+            .into_iter()
+            .map(|x| x.kind)
+            .collect();
+        assert!(k.contains(&AnomalyKind::DanglingGrainTable));
+        assert!(k.contains(&AnomalyKind::PrimaryGdRecoverableViaRgd));
+        // first finding is the most severe (Error sorts before Warning)
+    }
+
+    #[test]
+    fn analyse_flags_unrecoverable_when_both_directories_damaged() {
+        let mut v = test_sparse_vmdk(&[0xAB; 512]);
+        v[21 * 512..21 * 512 + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        v[22 * 512..22 * 512 + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        let mut a = VmdkIntegrity::new(Cursor::new(v));
+        let k: Vec<_> = a
+            .analyse()
+            .expect("io")
+            .into_iter()
+            .map(|x| x.kind)
+            .collect();
+        assert!(k.contains(&AnomalyKind::PrimaryGdUnrecoverable));
     }
 
     #[test]

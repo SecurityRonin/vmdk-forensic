@@ -23,7 +23,5 @@ fuzz_target!(|data: &[u8]| {
         }
     }
     let _ = r.iter_allocated_grains();
-    let _ = r.check_integrity();
-    let _ = r.grain_directory_recovery();
     let _ = r.rgd_recovery_count();
 });
