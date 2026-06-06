@@ -416,3 +416,21 @@ fn extent_dependencies_real_monolithic_sparse_is_empty() {
         "self-contained binary VMDK has no deps, got: {deps:?}"
     );
 }
+
+#[test]
+fn compressed_streamoptimized_reads_fully() {
+    // compressed_stream_opt.vmdk has DEFLATE grains — reading to the end exercises the
+    // compressed-grain decode path.
+    let data = read_fixture("compressed_stream_opt.vmdk");
+    let mut reader = vmdk::VmdkReader::open(Cursor::new(data)).expect("open compressed");
+    let mut buf = vec![0u8; 65536];
+    let mut total = 0u64;
+    loop {
+        match std::io::Read::read(&mut reader, &mut buf) {
+            Ok(0) => break,
+            Ok(n) => total += n as u64,
+            Err(e) => panic!("compressed read failed: {e}"),
+        }
+    }
+    assert_eq!(total, reader.virtual_disk_size());
+}

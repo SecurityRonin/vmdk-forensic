@@ -1,4 +1,3 @@
-#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 //! Pure-Rust read-only VMDK disk image reader.
 //!
 //! Supports monolithic sparse (`monolithicSparse`), stream-optimised
@@ -1839,7 +1838,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(coverage_nightly, coverage(off))]
     fn cowd_reader_matches_qemu_img() {
         if !qemu_img_available() {
             eprintln!("skipping: qemu-img not installed");
@@ -1851,7 +1849,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(coverage_nightly, coverage(off))]
     fn sesparse_reader_matches_qemu_img() {
         if !qemu_img_available() {
             eprintln!("skipping: qemu-img not installed");
@@ -2233,7 +2230,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(coverage_nightly, coverage(off))]
     fn reads_match_qemu_raw_convert() {
         use std::fs::File;
         let Some(qemu_img) = qemu_img() else {
@@ -2436,6 +2432,23 @@ mod tests {
         assert_eq!(grains.len(), 1);
         assert_eq!(grains[0].start_lba, 0);
         assert_eq!(grains[0].sector_count, 2);
+    }
+
+    #[test]
+    fn sesparse_sparse_grain_directory_entry_reads_zero() {
+        // Widen capacity so a second, sparse (GD[1] == 0) grain-directory entry is
+        // in-bounds — exercises the seSparse sparse-entry read / is_allocated / iter paths.
+        let mut se = test_sesparse_vmdk(&[0xAB; 512]);
+        let cap = (sesparse::SE_GTES_PER_GT + 1) * 8; // 4097 grains × 8 sectors
+        se[16..24].copy_from_slice(&cap.to_le_bytes()); // seSparse capacity field
+        let mut r = VmdkReader::open(Cursor::new(se)).expect("open");
+        let lba = sesparse::SE_GTES_PER_GT * 8; // first LBA in the second GD entry
+        assert!(!r.is_allocated(lba).expect("is_allocated"));
+        assert_eq!(r.iter_allocated_grains().expect("iter").len(), 1);
+        r.seek(SeekFrom::Start(lba * 512)).expect("seek");
+        let mut buf = [0xFFu8; 512];
+        r.read_exact(&mut buf).expect("read");
+        assert_eq!(buf, [0u8; 512]);
     }
 
     #[test]

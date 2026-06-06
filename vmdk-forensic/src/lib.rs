@@ -850,6 +850,69 @@ mod tests {
     }
 
     #[test]
+    fn validate_rgd_false_when_grain_directory_out_of_bounds() {
+        let mut v = test_sparse_vmdk(&[0u8; 512]);
+        v[56..64].copy_from_slice(&9_999_999u64.to_le_bytes()); // gd_offset past EOF
+        let mut a = VmdkIntegrity::new(Cursor::new(v));
+        assert!(!a.validate_rgd().expect("io"));
+        assert!(a.check_integrity().expect("io").is_ok()); // no parseable layout
+    }
+
+    #[test]
+    fn validate_rgd_false_when_rgd_directory_out_of_bounds() {
+        let mut v = test_sparse_vmdk(&[0xAB; 512]);
+        v[48..56].copy_from_slice(&9_999_999u64.to_le_bytes()); // rgd_offset past EOF
+        let mut a = VmdkIntegrity::new(Cursor::new(v));
+        assert!(!a.validate_rgd().expect("io"));
+    }
+
+    #[test]
+    fn sesparse_zero_grain_size_and_oob_gd_are_safe() {
+        let mut se = test_sesparse_vmdk(&[0u8; 512]);
+        se[24..32].copy_from_slice(&0u64.to_le_bytes()); // grain_size = 0
+        let mut a = VmdkIntegrity::new(Cursor::new(se));
+        assert!(a.check_integrity().expect("io").is_ok());
+
+        let mut se2 = test_sesparse_vmdk(&[0u8; 512]);
+        se2[128..136].copy_from_slice(&9_999_999u64.to_le_bytes()); // gd_offset past EOF
+        let mut a2 = VmdkIntegrity::new(Cursor::new(se2));
+        assert!(a2.check_integrity().expect("io").is_ok());
+    }
+
+    #[test]
+    fn streamoptimized_gd_at_end_footer_resolution() {
+        // Build a GD_AT_END image: the primary header's gd_offset is the sentinel and the
+        // real GD offset lives in the footer header (file_end - 1024).
+        let mut v = test_sparse_vmdk(&[0xAB; 512]);
+        v[56..64].copy_from_slice(&0xFFFF_FFFF_FFFF_FFFFu64.to_le_bytes()); // gd_offset = GD_AT_END
+        let mut footer = v[0..512].to_vec();
+        footer[56..64].copy_from_slice(&21u64.to_le_bytes()); // footer points at the real GD (sector 21)
+        v.extend_from_slice(&footer);
+        v.extend_from_slice(&[0u8; 512]); // EOS marker
+        let mut a = VmdkIntegrity::new(Cursor::new(v));
+        assert!(a.check_integrity().expect("io").is_ok());
+        assert!(a.validate_rgd().expect("io"));
+    }
+
+    #[test]
+    fn sesparse_huge_capacity_grain_directory_too_large_is_safe() {
+        let mut se = test_sesparse_vmdk(&[0u8; 512]);
+        se[16..24].copy_from_slice(&u64::MAX.to_le_bytes()); // capacity → GD size exceeds the cap
+        let mut a = VmdkIntegrity::new(Cursor::new(se));
+        assert!(a.check_integrity().expect("io").is_ok()); // bails out safely
+    }
+
+    #[test]
+    fn sesparse_allocated_gte_grain_past_eof_is_flagged() {
+        // Set GT[0] to an allocated entry whose grain index lands past EOF.
+        let mut se = test_sesparse_vmdk(&[0xAB; 512]);
+        let gt0 = 3 * 512; // grain table 0 starts at sector 3 in the fixture
+        se[gt0..gt0 + 8].copy_from_slice(&(0x3000_0000_0000_0000u64 | 0x00FF_FFFF).to_le_bytes());
+        let mut a = VmdkIntegrity::new(Cursor::new(se));
+        let _ = a.check_integrity().expect("io"); // must not panic on the crafted grain index
+    }
+
+    #[test]
     fn analyse_clean_image_has_no_error_anomalies() {
         let v = test_sparse_vmdk(&[0xAB; 512]);
         let mut a = VmdkIntegrity::new(Cursor::new(v));

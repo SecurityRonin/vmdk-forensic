@@ -859,6 +859,17 @@ mod tests {
     }
 
     #[test]
+    fn dump_hex_recover_prints_note_on_recoverable_image() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut vmdk = vmdk::testutil::test_sparse_vmdk(&[0xAB; 512]);
+        vmdk[21 * 512..21 * 512 + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        let p = dir.path().join("corrupt.vmdk");
+        std::fs::write(&p, &vmdk).unwrap();
+        // hex + recover → recovers a grain → prints the recovery note (covers that branch)
+        assert!(is_success(cmd_dump(&p, None, 0, Some(512), true, true)));
+    }
+
+    #[test]
     fn dump_recover_reads_through_damaged_primary_gd() {
         // A VMDK whose primary GD entry is corrupted (out of bounds) but whose RGD and
         // grain table are intact: `dump` fails by default, but `--recover` resolves the

@@ -136,7 +136,8 @@ jobs:
       - name: Install qemu-img
         run: sudo apt-get update && sudo apt-get install -y qemu-utils
       - run: cargo install cargo-llvm-cov --locked
-      # Regression backstop. Production code is ~100% covered; the remaining lines are
-      # defensive unreachable!() arms and environment-conditional test guards.
-      - run: cargo llvm-cov --workspace --all-features --summary-only --fail-under-lines 95
+      # Regression backstop at 97% lines (actual ~97.7%). The uncovered remainder is
+      # fault-injection error arms, environment-conditional test guards, and a few
+      # defensive guards — not worth contriving tests or coverage-exclusions for.
+      - run: cargo llvm-cov --workspace --all-features --summary-only --fail-under-lines 97
 

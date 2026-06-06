@@ -4,8 +4,6 @@ members = ["vmdk", "vmdk-cli", "vmdk-forensic"]
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
-# `coverage_nightly` is set by cargo-llvm-cov on nightly to honour #[coverage(off)].
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
 
 [workspace.lints.clippy]
 pedantic              = { level = "warn", priority = -1 }
