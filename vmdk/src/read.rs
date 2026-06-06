@@ -223,12 +223,22 @@ impl<R: Read + Seek> VmdkReader<R> {
     ) -> io::Result<usize> {
         use flate2::read::ZlibDecoder;
 
+        let grain_size_bytes = self.sparse_grain_size_bytes();
         let mut compressed = vec![0u8; data_size as usize];
         self.read_exact_at(data_offset, &mut compressed)?;
 
-        let mut decoder = ZlibDecoder::new(compressed.as_slice());
+        // Bound the decode to one grain (+1 sentinel byte). A legitimate grain
+        // decompresses to exactly grain_size_bytes; anything larger is a crafted
+        // decompression bomb and is refused before the expansion is materialised.
+        let mut decoder = ZlibDecoder::new(compressed.as_slice()).take(grain_size_bytes + 1);
         let mut grain_data = Vec::new();
         decoder.read_to_end(&mut grain_data)?;
+        if grain_data.len() as u64 > grain_size_bytes {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "compressed grain decompresses beyond its grain size (possible decompression bomb)",
+            ));
+        }
 
         let start = offset_in_grain as usize;
         let end = (start + buf.len()).min(grain_data.len());
