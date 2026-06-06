@@ -17,6 +17,9 @@ exclude      = ["tests/data/", "fuzz/"]
 [features]
 test-helpers = []
 serde = ["dep:serde"]
+# Forward internal diagnostics to the `tracing` ecosystem for structured,
+# level-filtered debugging over untrusted images. Off by default — zero logging dep.
+trace = ["dep:tracing"]
 
 [[example]]
 name = "emit_fixture"
@@ -24,6 +27,7 @@ required-features = ["test-helpers"]
 
 [dependencies]
 thiserror = "2"
+tracing   = { version = "0.1", optional = true }
 flate2    = "1"
 serde     = { version = "1", features = ["derive"], optional = true }
 sha2      = "0.10"

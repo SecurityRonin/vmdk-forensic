@@ -14,6 +14,7 @@ mod chain;
 mod cowd;
 mod ddb;
 mod descriptor;
+mod diag;
 pub(crate) mod error;
 mod flat;
 pub mod header;
@@ -296,6 +297,13 @@ impl<R: Read + Seek> VmdkReader<R> {
             .map(|c| u32::from_le_bytes(c.try_into().expect("4-byte chunk from chunks_exact(4)")))
             .collect();
 
+        diag::opened(
+            desc.create_type.as_ref(),
+            hdr.version,
+            virtual_disk_size,
+            grain_size_bytes,
+            hdr.compressed,
+        );
         Ok(VmdkReader {
             inner: reader,
             fmt: FormatState::Sparse {
@@ -808,6 +816,7 @@ impl<R: Read + Seek> VmdkReader<R> {
         }
         let rgd = self.rgd_dir_entry(gd_idx, file_len)?;
         if usable(rgd) {
+            diag::pointer_recovered(gd_idx, primary, rgd);
             return Ok(rgd);
         }
         Ok(primary)
@@ -1010,6 +1019,7 @@ impl<R: Read + Seek> VmdkReader<R> {
         let gte = if self.rgd_fallback && gte <= 1 {
             let rgd_gte = self.rgd_gte(gd_idx, gte_idx, num_gtes_per_gt)?;
             if rgd_gte > 1 {
+                diag::entry_recovered(gd_idx, gte_idx);
                 from_rgd = true;
                 rgd_gte
             } else {
@@ -1019,6 +1029,7 @@ impl<R: Read + Seek> VmdkReader<R> {
             gte
         };
         if gte <= 1 {
+            diag::grain_resolved(virtual_offset, "sparse");
             return Ok(GrainLookup::Sparse); // sparse or explicitly-zeroed grain
         }
         if from_rgd {
@@ -1044,12 +1055,14 @@ impl<R: Read + Seek> VmdkReader<R> {
                     ),
                 ));
             }
+            diag::grain_resolved(virtual_offset, "compressed");
             return Ok(GrainLookup::Compressed {
                 data_offset: marker_offset + 12,
                 data_size,
                 offset_in_grain,
             });
         }
+        diag::grain_resolved(virtual_offset, "file");
         Ok(GrainLookup::FileOffset(
             u64::from(gte) * SECTOR_SIZE + offset_in_grain,
         ))

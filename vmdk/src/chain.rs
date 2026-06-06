@@ -42,6 +42,7 @@ impl VmdkChainReader {
         for depth in 0..=MAX_CHAIN_DEPTH {
             let reader = VmdkFileReader::open_path(&current_path)?;
             let parent_cid = reader.parent_cid();
+            crate::diag::chain_layer(depth, reader.cid(), parent_cid);
 
             // A CID mismatch between a child's parentCID and its parent's CID means the
             // parent was modified after the snapshot was taken. QEMU warns but continues,
