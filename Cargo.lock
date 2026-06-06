@@ -688,7 +688,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vmdk"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "flate2",
  "md-5",
@@ -702,10 +702,18 @@ dependencies = [
 
 [[package]]
 name = "vmdk-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "clap",
  "tempfile",
+ "vmdk",
+]
+
+[[package]]
+name = "vmdk-forensic"
+version = "0.1.0"
+dependencies = [
+ "serde",
  "vmdk",
 ]
 
