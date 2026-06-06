@@ -36,3 +36,12 @@ fn truncated_image_fails_integrity() {
         "truncated image must fail integrity: {report:?}"
     );
 }
+
+#[test]
+fn streamoptimized_image_analyses_via_footer_gd() {
+    // stream_opt.vmdk uses GD_AT_END — exercises the footer grain-directory resolution.
+    let mut a = VmdkIntegrity::new(Cursor::new(fixture("stream_opt.vmdk")));
+    let _ = a.check_integrity().expect("check_integrity");
+    let _ = a.validate_rgd().expect("validate_rgd");
+    let _ = a.analyse().expect("analyse");
+}

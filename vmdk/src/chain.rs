@@ -287,12 +287,9 @@ mod tests {
         let bytes = crate::testutil::test_sparse_vmdk_with_descriptor(&[0u8; 512], desc);
         let p = dir.path().join("self.vmdk");
         std::fs::write(&p, &bytes).unwrap();
-        match VmdkChainReader::open(&p) {
-            Err(VmdkError::InvalidGeometry(_)) => {}
-            other => panic!(
-                "self-reference must hit the depth limit, got: {:?}",
-                other.is_ok()
-            ),
-        }
+        assert!(matches!(
+            VmdkChainReader::open(&p),
+            Err(VmdkError::InvalidGeometry(_))
+        ));
     }
 }

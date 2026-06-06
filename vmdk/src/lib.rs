@@ -1,3 +1,4 @@
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 //! Pure-Rust read-only VMDK disk image reader.
 //!
 //! Supports monolithic sparse (`monolithicSparse`), stream-optimised
@@ -670,13 +671,11 @@ impl<R: Read + Seek> VmdkReader<R> {
             } else {
                 None
             };
-            if gt_sector == 0 && redundant_gt.is_none() {
+            if gt_sector == 0 {
                 continue;
             }
             let gt_size = num_gtes_per_gt as usize * 4;
-            let gt_bytes = if gt_sector == 0 {
-                vec![0u8; gt_size]
-            } else {
+            let gt_bytes = {
                 let gt_byte_offset = u64::from(gt_sector) * SECTOR_SIZE;
                 self.inner.seek(SeekFrom::Start(gt_byte_offset))?;
                 let mut b = vec![0u8; gt_size];
@@ -882,6 +881,20 @@ impl<R: Read + Seek> VmdkReader<R> {
         let mut b = [0u8; 4];
         self.inner.read_exact(&mut b)?;
         Ok(u32::from_le_bytes(b))
+    }
+
+    /// Grain size in bytes for the sparse/seSparse read path (0 for flat, which is
+    /// handled before this is reached on the read path).
+    fn sparse_grain_size_bytes(&self) -> u64 {
+        match &self.fmt {
+            FormatState::Sparse {
+                grain_size_bytes, ..
+            }
+            | FormatState::SeSparse {
+                grain_size_bytes, ..
+            } => *grain_size_bytes,
+            FormatState::Flat => 0,
+        }
     }
 
     /// Resolve `virtual_offset` to a [`GrainLookup`] describing where to find the data.
@@ -1318,15 +1331,7 @@ impl<R: Read + Seek> Read for VmdkReader<R> {
         }
 
         // Sparse / StreamOptimized / SeSparse: clamp at grain boundary then do GTE lookup.
-        let grain_size_bytes = match &self.fmt {
-            FormatState::Sparse {
-                grain_size_bytes, ..
-            }
-            | FormatState::SeSparse {
-                grain_size_bytes, ..
-            } => *grain_size_bytes,
-            FormatState::Flat => unreachable!(),
-        };
+        let grain_size_bytes = self.sparse_grain_size_bytes();
         let remaining_in_grain = (grain_size_bytes - (self.pos % grain_size_bytes)) as usize;
         let to_read = buf.len().min(remaining_virtual).min(remaining_in_grain);
 
@@ -1412,12 +1417,8 @@ mod tests {
         let mut vmdk = test_sparse_vmdk(&[0u8; 512]);
         vmdk[4..8].copy_from_slice(&2u32.to_le_bytes()); // version = 2
         vmdk[8..12].copy_from_slice(&0x0000_0004u32.to_le_bytes()); // VMDK4_FLAG_ZERO_GRAIN
-        let reader = VmdkReader::open(Cursor::new(vmdk));
-        assert!(
-            reader.is_ok(),
-            "version=2 (zeroed-grain) monolithicSparse must open, got: {:?}",
-            reader.err()
-        );
+        VmdkReader::open(Cursor::new(vmdk))
+            .expect("version=2 (zeroed-grain) monolithicSparse must open");
     }
 
     #[test]
@@ -1727,11 +1728,7 @@ mod tests {
         let desc_path = dir.path().join("disk_desc.vmdk");
         std::fs::write(&desc_path, desc.as_bytes()).unwrap();
         let result = VmdkFileReader::open_path(&desc_path);
-        assert!(
-            result.is_ok(),
-            "vmfs descriptor with VMFS extent must open, got: {:?}",
-            result.err()
-        );
+        result.expect("vmfs descriptor with VMFS extent must open");
     }
 
     #[test]
@@ -1752,11 +1749,7 @@ mod tests {
         let desc_path = dir.path().join("desc.vmdk");
         std::fs::write(&desc_path, desc.as_bytes()).unwrap();
         let result = VmdkFileReader::open_path(&desc_path);
-        assert!(
-            result.is_ok(),
-            "vmfsSparse/VMFSSPARSE descriptor must open, got: {:?}",
-            result.err()
-        );
+        result.expect("vmfsSparse/VMFSSPARSE descriptor must open");
     }
 
     // ── seSparse format (vSphere 6.5+ VMFS6) ─────────────────────────────────
@@ -1764,12 +1757,7 @@ mod tests {
     #[test]
     fn sesparse_vmdk_opens_successfully() {
         let se = test_sesparse_vmdk(&[0u8; 512]);
-        let reader = VmdkReader::open(Cursor::new(se));
-        assert!(
-            reader.is_ok(),
-            "seSparse VMDK must open, got: {:?}",
-            reader.err()
-        );
+        VmdkReader::open(Cursor::new(se)).expect("seSparse VMDK must open");
     }
 
     #[test]
@@ -1851,6 +1839,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn cowd_reader_matches_qemu_img() {
         if !qemu_img_available() {
             eprintln!("skipping: qemu-img not installed");
@@ -1862,6 +1851,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn sesparse_reader_matches_qemu_img() {
         if !qemu_img_available() {
             eprintln!("skipping: qemu-img not installed");
@@ -1924,11 +1914,7 @@ mod tests {
     fn cowd_vmdk_opens_without_bad_magic_error() {
         let cowd = test_cowd_vmdk(&[0u8; 512]);
         let reader = VmdkReader::open(Cursor::new(cowd));
-        assert!(
-            reader.is_ok(),
-            "COWD VMDK must open successfully, got: {:?}",
-            reader.err()
-        );
+        reader.expect("COWD VMDK must open successfully");
     }
 
     #[test]
@@ -2247,6 +2233,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn reads_match_qemu_raw_convert() {
         use std::fs::File;
         let Some(qemu_img) = qemu_img() else {
@@ -2449,6 +2436,19 @@ mod tests {
         assert_eq!(grains.len(), 1);
         assert_eq!(grains[0].start_lba, 0);
         assert_eq!(grains[0].sector_count, 2);
+    }
+
+    #[test]
+    fn grain_location_and_grain_size_on_flat_reader() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut r = open_flat_descriptor(dir.path(), &[1u8; 1024]);
+        // grain_location is never called for Flat on the read path; calling it directly
+        // exercises the "not reached" guard.
+        assert!(matches!(
+            r.grain_location(0).expect("loc"),
+            GrainLookup::Sparse
+        ));
+        assert_eq!(r.sparse_grain_size_bytes(), 0);
     }
 
     // ── Coverage: accessors, format-specific branches, open_path arms ─────────
@@ -2714,10 +2714,10 @@ mod tests {
         // capacity * 512 overflows u64 → InvalidGeometry rather than a panic.
         let mut vmdk = test_sparse_vmdk(&[0u8; 512]);
         vmdk[12..20].copy_from_slice(&u64::MAX.to_le_bytes());
-        match VmdkReader::open(Cursor::new(vmdk)) {
-            Err(VmdkError::InvalidGeometry(_)) => {}
-            other => panic!("expected InvalidGeometry, got ok={}", other.is_ok()),
-        }
+        assert!(matches!(
+            VmdkReader::open(Cursor::new(vmdk)),
+            Err(VmdkError::InvalidGeometry(_))
+        ));
     }
 
     #[test]
