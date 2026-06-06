@@ -76,15 +76,19 @@ impl SeConstHeader {
         let capacity = u64::from_le_bytes(data[16..24].try_into().expect("8 bytes"));
         let grain_size = u64::from_le_bytes(data[24..32].try_into().expect("8 bytes"));
         if grain_size != SE_GRAIN_SECTORS {
-            return Err(VmdkError::InvalidGeometry(format!(
-                "seSparse grain_size must be {SE_GRAIN_SECTORS}, got {grain_size}"
-            )));
+            return Err(VmdkError::FieldOutOfRange {
+                field: "grain_size",
+                value: grain_size,
+                reason: "must equal the seSparse fixed grain size (8 sectors)",
+            });
         }
         let grain_table_size = u64::from_le_bytes(data[32..40].try_into().expect("8 bytes"));
         if grain_table_size != SE_GT_SECTORS {
-            return Err(VmdkError::InvalidGeometry(format!(
-                "seSparse grain_table_size must be {SE_GT_SECTORS}, got {grain_table_size}"
-            )));
+            return Err(VmdkError::FieldOutOfRange {
+                field: "grain_table_size",
+                value: grain_table_size,
+                reason: "must equal the seSparse fixed grain-table size",
+            });
         }
         // Grain directory offset @128; grain tables @144; grain data @192 (all sectors).
         let gd_offset = u64::from_le_bytes(data[128..136].try_into().expect("8 bytes"));
@@ -123,9 +127,11 @@ pub(crate) fn open_sesparse<R: Read + Seek>(
     let gd_bytes = num_gts * 8; // 8 bytes per GD entry (u64)
     const MAX_SESP_GD: u64 = 16 * 1024 * 1024;
     if gd_bytes > MAX_SESP_GD {
-        return Err(VmdkError::InvalidGeometry(
-            "seSparse grain directory too large".into(),
-        ));
+        return Err(VmdkError::FieldOutOfRange {
+            field: "grain_directory",
+            value: gd_bytes,
+            reason: "exceeds the 16 MiB cap",
+        });
     }
 
     let gd_offset_bytes = hdr.gd_offset * SECTOR_SIZE;
@@ -202,7 +208,7 @@ mod tests {
         h[24..32].copy_from_slice(&16u64.to_le_bytes()); // grain_size=16, not 8
         assert!(matches!(
             SeConstHeader::parse(&h),
-            Err(VmdkError::InvalidGeometry(_))
+            Err(VmdkError::FieldOutOfRange { field: "grain_size", .. })
         ));
     }
 
@@ -220,7 +226,7 @@ mod tests {
         h[32..40].copy_from_slice(&128u64.to_le_bytes()); // grain_table_size=128, not 64
         assert!(matches!(
             SeConstHeader::parse(&h),
-            Err(VmdkError::InvalidGeometry(_))
+            Err(VmdkError::FieldOutOfRange { field: "grain_table_size", .. })
         ));
     }
 
@@ -230,7 +236,7 @@ mod tests {
         let h = make_sesparse_header(100_000_000_000);
         assert!(matches!(
             open_sesparse(std::io::Cursor::new(h)),
-            Err(VmdkError::InvalidGeometry(_))
+            Err(VmdkError::FieldOutOfRange { field: "grain_directory", .. })
         ));
     }
 }

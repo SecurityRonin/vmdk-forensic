@@ -76,15 +76,15 @@ pub(crate) fn parse_text_descriptor(text: &str) -> Result<TextDescriptor> {
         if let Some(ext) = try_parse_flat_extent(line) {
             capacity_sectors = capacity_sectors
                 .checked_add(ext.size_sectors)
-                .ok_or_else(|| VmdkError::InvalidGeometry("extent capacity overflow".into()))?;
+                .ok_or(VmdkError::GeometryOverflow { field: "capacity" })?;
             extents.push(ext);
             continue;
         }
         if let Some(ext) = try_parse_sparse_extent(line) {
             sparse_capacity_sectors = sparse_capacity_sectors
                 .checked_add(ext.size_sectors)
-                .ok_or_else(|| {
-                    VmdkError::InvalidGeometry("sparse extent capacity overflow".into())
+                .ok_or({
+                    VmdkError::GeometryOverflow { field: "capacity" }
                 })?;
             sparse_extents.push(ext);
         }
@@ -316,7 +316,7 @@ RW 2048 FLAT "flat-f001.vmdk" 0
         );
         assert!(matches!(
             parse_text_descriptor(&text),
-            Err(VmdkError::InvalidGeometry(_))
+            Err(VmdkError::GeometryOverflow { field: "capacity" })
         ));
     }
 
@@ -328,7 +328,7 @@ RW 2048 FLAT "flat-f001.vmdk" 0
         );
         assert!(matches!(
             parse_text_descriptor(&text),
-            Err(VmdkError::InvalidGeometry(_))
+            Err(VmdkError::GeometryOverflow { field: "capacity" })
         ));
     }
 }

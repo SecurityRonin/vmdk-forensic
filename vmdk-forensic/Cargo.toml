@@ -1,6 +1,6 @@
 [package]
 name         = "vmdk-forensic"
-version      = "0.1.0"
+version      = "0.2.0"
 edition      = "2021"
 rust-version = "1.85"
 description  = "Forensic integrity analysis for VMware VMDK images — redundant-grain-directory adjudication, dangling-pointer scan, recovery triage, and header provenance"
@@ -17,11 +17,11 @@ categories   = ["parser-implementations", "filesystem"]
 serde = ["dep:serde", "vmdk/serde"]
 
 [dependencies]
-vmdk  = { version = "0.4.0", path = "../vmdk" }
+vmdk  = { version = "0.5.0", path = "../vmdk" }
 serde = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
-vmdk = { version = "0.4.0", path = "../vmdk", features = ["test-helpers"] }
+vmdk = { version = "0.5.0", path = "../vmdk", features = ["test-helpers"] }
 
 [lints]
 workspace = true

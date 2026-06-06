@@ -77,23 +77,29 @@ impl SparseExtentHeader {
         // Validate geometry before these values feed division arithmetic in the reader.
         // VDF 1.1 §4.1: minimum grain size is 8 sectors (4 KiB).
         if grain_size < 8 {
-            return Err(VmdkError::InvalidGeometry(
-                "grain_size must be >= 8 sectors per VDF 1.1 spec".into(),
-            ));
+            return Err(VmdkError::FieldOutOfRange {
+                field: "grain_size",
+                value: grain_size,
+                reason: "must be >= 8 sectors (VDF 1.1 §4.1)",
+            });
         }
         if num_gtes_per_gt == 0 {
-            return Err(VmdkError::InvalidGeometry(
-                "num_gtes_per_gt must be > 0".into(),
-            ));
+            return Err(VmdkError::FieldOutOfRange {
+                field: "num_gtes_per_gt",
+                value: u64::from(num_gtes_per_gt),
+                reason: "must be > 0",
+            });
         }
         // VDF 1.1 defines numGTEsPerGT as 512; QEMU's vmdk_open_vmdk4 rejects any
         // larger value. Enforcing it here bounds the read path's grain-table
         // allocation (`vec![0u8; num_gtes_per_gt * 4]`) at parse time, so no caller
         // can be driven into a multi-gigabyte allocation by a crafted header.
         if num_gtes_per_gt > MAX_NUM_GTES_PER_GT {
-            return Err(VmdkError::InvalidGeometry(format!(
-                "num_gtes_per_gt {num_gtes_per_gt} exceeds spec maximum {MAX_NUM_GTES_PER_GT}"
-            )));
+            return Err(VmdkError::FieldOutOfRange {
+                field: "num_gtes_per_gt",
+                value: u64::from(num_gtes_per_gt),
+                reason: "exceeds the spec maximum of 512",
+            });
         }
 
         Ok(SparseExtentHeader {

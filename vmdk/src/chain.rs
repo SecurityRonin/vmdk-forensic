@@ -54,9 +54,11 @@ impl VmdkChainReader {
                 break; // reached base image
             }
             if depth == MAX_CHAIN_DEPTH {
-                return Err(VmdkError::InvalidGeometry(format!(
-                    "snapshot chain depth exceeds limit of {MAX_CHAIN_DEPTH}"
-                )));
+                return Err(VmdkError::FieldOutOfRange {
+                    field: "chain_depth",
+                    value: MAX_CHAIN_DEPTH as u64,
+                    reason: "snapshot chain exceeds the maximum supported depth",
+                });
             }
 
             // Resolve the parent path relative to the current file's directory.
@@ -290,7 +292,7 @@ mod tests {
         std::fs::write(&p, &bytes).unwrap();
         assert!(matches!(
             VmdkChainReader::open(&p),
-            Err(VmdkError::InvalidGeometry(_))
+            Err(VmdkError::FieldOutOfRange { field: "chain_depth", .. })
         ));
     }
 }

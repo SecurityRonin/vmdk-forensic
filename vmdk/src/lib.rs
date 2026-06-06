@@ -233,32 +233,30 @@ impl<R: Read + Seek> VmdkReader<R> {
         let grain_size_bytes = hdr
             .grain_size
             .checked_mul(SECTOR_SIZE)
-            .ok_or_else(|| VmdkError::InvalidGeometry("grain_size overflow".into()))?;
+            .ok_or(VmdkError::GeometryOverflow { field: "grain_size" })?;
         let virtual_disk_size = hdr
             .capacity
             .checked_mul(SECTOR_SIZE)
-            .ok_or_else(|| VmdkError::InvalidGeometry("capacity overflow".into()))?;
+            .ok_or(VmdkError::GeometryOverflow { field: "capacity" })?;
 
         let desc = read_descriptor(&mut reader, &hdr)?;
 
         let num_grains = hdr
             .capacity
             .checked_add(hdr.grain_size - 1)
-            .ok_or_else(|| VmdkError::InvalidGeometry("capacity+grain_size overflow".into()))?
+            .ok_or(VmdkError::GeometryOverflow { field: "capacity" })?
             / hdr.grain_size;
         let num_gts = num_grains
             .checked_add(u64::from(hdr.num_gtes_per_gt) - 1)
-            .ok_or_else(|| VmdkError::InvalidGeometry("num_grains overflow".into()))?
+            .ok_or(VmdkError::GeometryOverflow { field: "num_grains" })?
             / u64::from(hdr.num_gtes_per_gt);
         let gd_byte_len = num_gts
             .checked_mul(4)
-            .ok_or_else(|| VmdkError::InvalidGeometry("gd_byte_len overflow".into()))?;
+            .ok_or(VmdkError::GeometryOverflow { field: "gd_byte_len" })?;
 
         const MAX_GD_BYTES: u64 = 16 * 1024 * 1024;
         if gd_byte_len > MAX_GD_BYTES {
-            return Err(VmdkError::InvalidGeometry(
-                "grain directory too large".into(),
-            ));
+            return Err(VmdkError::FieldOutOfRange { field: "grain_directory", value: gd_byte_len, reason: "exceeds the 16 MiB cap" });
         }
         // For streamOptimized, the primary header carries GD_AT_END as a sentinel;
         // the real GD offset is in the footer header at file_end − 1024 (VDF 1.1 §4.6).
@@ -273,7 +271,7 @@ impl<R: Read + Seek> VmdkReader<R> {
 
         let gd_sector_offset = gd_offset
             .checked_mul(SECTOR_SIZE)
-            .ok_or_else(|| VmdkError::InvalidGeometry("gd_offset overflow".into()))?;
+            .ok_or(VmdkError::GeometryOverflow { field: "gd_offset" })?;
         reader.seek(SeekFrom::Start(gd_sector_offset))?;
         let mut gd_bytes = vec![0u8; gd_byte_len as usize];
         reader.read_exact(&mut gd_bytes)?;
@@ -430,7 +428,7 @@ impl<R: Read + Seek> VmdkReader<R> {
         let virtual_disk_size = se_hdr
             .capacity
             .checked_mul(SECTOR_SIZE)
-            .ok_or_else(|| VmdkError::InvalidGeometry("seSparse capacity overflow".into()))?;
+            .ok_or(VmdkError::GeometryOverflow { field: "capacity" })?;
 
         Ok(VmdkReader {
             inner: reader,
@@ -470,7 +468,7 @@ impl<R: Read + Seek> VmdkReader<R> {
         let cowd_hdr = cowd::CowdHeader::parse(hdr_bytes)?;
         let virtual_disk_size = u64::from(cowd_hdr.capacity)
             .checked_mul(SECTOR_SIZE)
-            .ok_or_else(|| VmdkError::InvalidGeometry("COWD capacity overflow".into()))?;
+            .ok_or(VmdkError::GeometryOverflow { field: "capacity" })?;
 
         Ok(VmdkReader {
             inner: reader,
@@ -848,7 +846,7 @@ impl VmdkFileReader {
                     let virtual_disk_size = desc
                         .capacity_sectors
                         .checked_mul(SECTOR_SIZE)
-                        .ok_or_else(|| VmdkError::InvalidGeometry("capacity overflow".into()))?;
+                        .ok_or(VmdkError::GeometryOverflow { field: "capacity" })?;
                     Ok(VmdkReader {
                         inner: Box::new(multi) as Box<dyn ReadSeek + Send>,
                         fmt: FormatState::Flat,
@@ -872,8 +870,8 @@ impl VmdkFileReader {
                     let virtual_disk_size = desc
                         .sparse_capacity_sectors
                         .checked_mul(SECTOR_SIZE)
-                        .ok_or_else(|| {
-                        VmdkError::InvalidGeometry("capacity overflow".into())
+                        .ok_or({
+                        VmdkError::GeometryOverflow { field: "capacity" }
                     })?;
                     Ok(VmdkReader {
                         inner: Box::new(multi) as Box<dyn ReadSeek + Send>,
@@ -894,10 +892,8 @@ impl VmdkFileReader {
                 }
                 // seSparse: a single binary extent whose CAFEBABE magic selects the reader.
                 "seSparse" => {
-                    let entry = desc.sparse_extents.first().ok_or_else(|| {
-                        VmdkError::InvalidGeometry(
-                            "seSparse descriptor has no SESPARSE extent".into(),
-                        )
+                    let entry = desc.sparse_extents.first().ok_or({
+                        VmdkError::MalformedDescriptor("seSparse createType without a SESPARSE extent")
                     })?;
                     let extent_path = dir.join(entry.filename.as_ref());
                     let file = BufReader::new(File::open(&extent_path)?);
@@ -910,8 +906,8 @@ impl VmdkFileReader {
                         let virtual_disk_size = desc
                             .capacity_sectors
                             .checked_mul(SECTOR_SIZE)
-                            .ok_or_else(|| {
-                                VmdkError::InvalidGeometry("capacity overflow".into())
+                            .ok_or({
+                                VmdkError::GeometryOverflow { field: "capacity" }
                             })?;
                         Ok(VmdkReader {
                             inner: Box::new(multi) as Box<dyn ReadSeek + Send>,
@@ -934,8 +930,8 @@ impl VmdkFileReader {
                         let virtual_disk_size = desc
                             .sparse_capacity_sectors
                             .checked_mul(SECTOR_SIZE)
-                            .ok_or_else(|| {
-                                VmdkError::InvalidGeometry("capacity overflow".into())
+                            .ok_or({
+                                VmdkError::GeometryOverflow { field: "capacity" }
                             })?;
                         Ok(VmdkReader {
                             inner: Box::new(multi) as Box<dyn ReadSeek + Send>,
@@ -954,9 +950,7 @@ impl VmdkFileReader {
                             rgd_recovery_count: 0,
                         })
                     } else {
-                        Err(VmdkError::InvalidGeometry(
-                            "custom descriptor has no recognised extents".into(),
-                        ))
+                        Err(VmdkError::MalformedDescriptor("custom createType without recognised extents"))
                     }
                 }
                 _ => Err(VmdkError::UnsupportedDiskType(
@@ -2339,7 +2333,7 @@ mod tests {
 
     #[test]
     fn open_rejects_capacity_overflow() {
-        // capacity * 512 overflows u64 → InvalidGeometry rather than a panic.
+        // capacity * 512 overflows u64 → GeometryOverflow rather than a panic.
         let mut vmdk = test_sparse_vmdk(&[0u8; 512]);
         vmdk[12..20].copy_from_slice(&u64::MAX.to_le_bytes());
         assert!(matches!(
@@ -2426,7 +2420,7 @@ mod tests {
         let img = vmdk_header_bytes(1_000_000_000_000, 8, 512);
         assert!(matches!(
             VmdkReader::open(Cursor::new(img)),
-            Err(VmdkError::InvalidGeometry(_))
+            Err(VmdkError::FieldOutOfRange { field: "grain_directory", .. })
         ));
     }
 
@@ -2485,7 +2479,7 @@ mod tests {
         std::fs::write(&desc_path, desc.as_bytes()).unwrap();
         assert!(matches!(
             VmdkFileReader::open_path(&desc_path),
-            Err(VmdkError::InvalidGeometry(_))
+            Err(VmdkError::MalformedDescriptor(_))
         ));
     }
 
@@ -2539,7 +2533,7 @@ mod tests {
             .unwrap();
         assert!(matches!(
             VmdkFileReader::open_path(&p),
-            Err(VmdkError::InvalidGeometry(_))
+            Err(VmdkError::MalformedDescriptor(_))
         ));
     }
 

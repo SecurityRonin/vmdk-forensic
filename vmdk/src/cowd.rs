@@ -56,9 +56,11 @@ impl CowdHeader {
         let capacity = u32::from_le_bytes(data[12..16].try_into().expect("4 bytes"));
         let grain_size = u32::from_le_bytes(data[16..20].try_into().expect("4 bytes"));
         if grain_size == 0 {
-            return Err(VmdkError::InvalidGeometry(
-                "COWD grain_size must be > 0".into(),
-            ));
+            return Err(VmdkError::FieldOutOfRange {
+                field: "grain_size",
+                value: u64::from(grain_size),
+                reason: "must be > 0",
+            });
         }
 
         Ok(CowdHeader {
@@ -79,7 +81,7 @@ pub(crate) fn open_cowd<R: Read + Seek>(mut reader: R) -> Result<(Vec<u32>, u64)
 
     let grain_size_bytes = u64::from(hdr.grain_size)
         .checked_mul(SECTOR_SIZE)
-        .ok_or_else(|| VmdkError::InvalidGeometry("COWD grain_size overflow".into()))?;
+        .ok_or(VmdkError::GeometryOverflow { field: "grain_size" })?;
 
     let num_grains = u64::from(hdr.capacity).div_ceil(u64::from(hdr.grain_size));
     let num_gts = num_grains.div_ceil(COWD_GTES_PER_GT as u64);
@@ -166,7 +168,7 @@ mod tests {
         let h = make_cowd_header(1024, 0, 1);
         assert!(matches!(
             CowdHeader::parse(&h),
-            Err(VmdkError::InvalidGeometry(_))
+            Err(VmdkError::FieldOutOfRange { field: "grain_size", .. })
         ));
     }
 

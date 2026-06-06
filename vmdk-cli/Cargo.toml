@@ -1,6 +1,6 @@
 [package]
 name         = "vmdk-cli"
-version      = "0.4.0"
+version      = "0.5.0"
 edition      = "2021"
 rust-version = "1.85"
 description  = "CLI tool for inspecting VMDK disk images"
@@ -15,15 +15,15 @@ name = "vmdk"
 path = "src/main.rs"
 
 [dependencies]
-vmdk = { version = "0.4.0", path = "../vmdk" }
-vmdk-forensic = { version = "0.1.0", path = "../vmdk-forensic" }
+vmdk = { version = "0.5.0", path = "../vmdk" }
+vmdk-forensic = { version = "0.2.0", path = "../vmdk-forensic" }
 clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3"
 # test-helpers exposes vmdk::testutil so e2e tests can synthesise fixtures
 # (deltas, matching-RGD images, differing-content pairs) for full CLI coverage.
-vmdk = { version = "0.4.0", path = "../vmdk", features = ["test-helpers"] }
+vmdk = { version = "0.5.0", path = "../vmdk", features = ["test-helpers"] }
 
 [lints]
 workspace = true
