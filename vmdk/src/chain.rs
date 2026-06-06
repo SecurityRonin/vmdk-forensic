@@ -258,6 +258,27 @@ mod tests {
     }
 
     #[test]
+    fn chain_read_does_not_zero_mask_an_allocated_grain_after_a_sparse_one() {
+        use std::io::Read as _;
+        // A 2-grain image: grain 0 is sparse, grain 1 holds 0xBB. A single read
+        // that spans both grains must not let the sparse grain 0 zero-mask the
+        // allocated grain 1 (the un-clamped zero-fill bug).
+        let dir = tempfile::tempdir().unwrap();
+        let g = crate::testutil::GRAIN_SIZE_BYTES;
+        let bytes = crate::testutil::test_sparse_vmdk_sparse_then_allocated(&vec![0xBBu8; g]);
+        let p = dir.path().join("base.vmdk");
+        std::fs::write(&p, &bytes).unwrap();
+        let mut chain = VmdkChainReader::open(&p).unwrap();
+        let mut buf = vec![0u8; 2 * g];
+        chain.read_exact(&mut buf).unwrap();
+        assert!(buf[..g].iter().all(|&b| b == 0), "grain 0 is sparse -> zeros");
+        assert!(
+            buf[g..].iter().all(|&b| b == 0xBB),
+            "grain 1 (allocated) must not be zero-masked by the sparse grain 0"
+        );
+    }
+
+    #[test]
     fn chain_refuses_absolute_parent_hint() {
         let dir = tempfile::tempdir().unwrap();
         let base = crate::testutil::test_sparse_vmdk_with_descriptor(

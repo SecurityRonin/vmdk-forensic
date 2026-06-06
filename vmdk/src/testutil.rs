@@ -73,6 +73,54 @@ pub fn test_sparse_vmdk(sector_data: &[u8]) -> Vec<u8> {
     vmdk
 }
 
+/// Build a 2-grain monolithic sparse VMDK where **grain 0 is sparse** and
+/// **grain 1 holds `grain1_data`**. Used to test that a read spanning both
+/// grains does not let the sparse grain 0 zero-mask the allocated grain 1.
+#[cfg_attr(not(any(test, feature = "test-helpers")), allow(dead_code))]
+pub fn test_sparse_vmdk_sparse_then_allocated(grain1_data: &[u8]) -> Vec<u8> {
+    let mut grain = vec![0u8; GRAIN_SIZE_BYTES];
+    let copy_len = grain1_data.len().min(GRAIN_SIZE_BYTES);
+    grain[..copy_len].copy_from_slice(&grain1_data[..copy_len]);
+
+    let mut hdr = vec![0u8; 512];
+    hdr[0..4].copy_from_slice(&MAGIC.to_le_bytes());
+    hdr[4..8].copy_from_slice(&VERSION.to_le_bytes());
+    hdr[12..20].copy_from_slice(&(2 * GRAIN_SIZE_SECTORS).to_le_bytes()); // capacity = 2 grains
+    hdr[20..28].copy_from_slice(&GRAIN_SIZE_SECTORS.to_le_bytes()); // grainSize
+    hdr[28..36].copy_from_slice(&DESCRIPTOR_OFFSET.to_le_bytes());
+    hdr[36..44].copy_from_slice(&DESCRIPTOR_SECTORS.to_le_bytes());
+    hdr[44..48].copy_from_slice(&NUM_GTES_PER_GT.to_le_bytes());
+    hdr[48..56].copy_from_slice(&RGD_SECTOR.to_le_bytes());
+    hdr[56..64].copy_from_slice(&GD_SECTOR.to_le_bytes());
+    hdr[64..72].copy_from_slice(&GRAIN_SECTOR.to_le_bytes());
+    hdr[73] = b'\n';
+    hdr[74] = b' ';
+    hdr[75] = b'\r';
+    hdr[76] = b'\n';
+
+    let mut desc = vec![0u8; DESCRIPTOR_SECTORS as usize * SECTOR_SIZE as usize];
+    let s = "# Disk DescriptorFile\nversion=1\nCID=fffffffe\nparentCID=ffffffff\ncreateType=\"monolithicSparse\"\n";
+    let n = s.len().min(desc.len());
+    desc[..n].copy_from_slice(&s.as_bytes()[..n]);
+
+    let mut gd = vec![0u8; SECTOR_SIZE as usize];
+    gd[0..4].copy_from_slice(&(GT_SECTOR as u32).to_le_bytes());
+    let rgd = gd.clone();
+
+    // GTE[0] = 0 (grain 0 sparse); GTE[1] → the single grain (grain 1 allocated).
+    let mut gt = vec![0u8; GT_SECTORS as usize * SECTOR_SIZE as usize];
+    gt[4..8].copy_from_slice(&(GRAIN_SECTOR as u32).to_le_bytes());
+
+    let mut vmdk = Vec::new();
+    vmdk.extend_from_slice(&hdr);
+    vmdk.extend_from_slice(&desc);
+    vmdk.extend_from_slice(&gd);
+    vmdk.extend_from_slice(&rgd);
+    vmdk.extend_from_slice(&gt);
+    vmdk.extend_from_slice(&grain);
+    vmdk
+}
+
 // ── seSparse test helpers ─────────────────────────────────────────────────────
 
 /// Build a minimal seSparse extent file with grain 0 containing `sector_data`.
