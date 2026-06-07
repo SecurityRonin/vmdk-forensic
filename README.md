@@ -212,6 +212,19 @@ companion crate — see [Related](#related).
   read/scan/integrity surface, and the RGD recovery paths; run in CI on every
   change and deeper on a schedule.
 
+Hardened further in **0.6.0** (all on the untrusted-input path):
+
+- **Descriptor path-traversal sandboxed** — extent and `parentFileNameHint`
+  paths are confined to the image directory; an absolute or `..`-climbing path
+  is refused, so a crafted descriptor can't read arbitrary host files.
+- **Decompression-bomb bounded** — a compressed grain is decoded only up to its
+  grain size and refused if it expands further, so a few-KB payload can't
+  amplify into a multi-megabyte allocation.
+- **Snapshot-chain reads grain-clamped** — a sparse grain can no longer
+  zero-mask an allocated grain that follows it within the same read.
+- **Mixed-extent descriptors rejected** — a `custom` image listing both flat and
+  sparse extents fails loud instead of silently dropping the sparse ones.
+
 ```bash
 # Requires nightly Rust and cargo-fuzz
 rustup install nightly

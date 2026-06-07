@@ -15,7 +15,7 @@ name = "vmdk"
 path = "src/main.rs"
 
 [dependencies]
-vmdk = { version = "0.5.1", path = "../vmdk" }
+vmdk = { version = "0.6.0", path = "../vmdk" }
 vmdk-forensic = { version = "0.6.0", path = "../vmdk-forensic" }
 clap = { version = "4", features = ["derive"] }
 
@@ -23,7 +23,7 @@ clap = { version = "4", features = ["derive"] }
 tempfile = "3"
 # test-helpers exposes vmdk::testutil so e2e tests can synthesise fixtures
 # (deltas, matching-RGD images, differing-content pairs) for full CLI coverage.
-vmdk = { version = "0.5.1", path = "../vmdk", features = ["test-helpers"] }
+vmdk = { version = "0.6.0", path = "../vmdk", features = ["test-helpers"] }
 
 [lints]
 workspace = true

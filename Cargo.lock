@@ -236,7 +236,7 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "forensicnomicon"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
 ]
@@ -732,7 +732,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vmdk"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "flate2",
  "md-5",
