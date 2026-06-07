@@ -1116,6 +1116,26 @@ mod tests {
     }
 
     #[test]
+    fn superseded_commands_hidden_others_visible() {
+        // info/verify/hash are superseded by the `examine` default (+ --fingerprint),
+        // so they stay functional but drop out of --help. dump/diff/map remain visible.
+        use clap::CommandFactory;
+        let cmd = Cli::command();
+        let hidden = |name: &str| {
+            cmd.get_subcommands()
+                .find(|s| s.get_name() == name)
+                .unwrap_or_else(|| panic!("{name} subcommand exists"))
+                .is_hide_set()
+        };
+        for name in ["info", "verify", "hash"] {
+            assert!(hidden(name), "{name} is hidden from --help");
+        }
+        for name in ["dump", "diff", "map"] {
+            assert!(!hidden(name), "{name} stays visible in --help");
+        }
+    }
+
+    #[test]
     fn fmt_commas_groups_thousands() {
         assert_eq!(fmt_commas(0), "0");
         assert_eq!(fmt_commas(1024), "1,024");
