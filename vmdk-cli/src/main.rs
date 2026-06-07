@@ -298,7 +298,6 @@ fn cmd_dump(
     recover: bool,
     allocated_only: bool,
 ) -> ExitCode {
-    let _ = allocated_only; // RED stub — sparse export wired in the GREEN commit.
     let mut reader = match open(path) {
         Ok(r) => r,
         Err(m) => return fail(m),
@@ -308,6 +307,11 @@ fn cmd_dump(
         // entry is damaged — recovers data qemu-img would fail on.
         reader.enable_rgd_fallback();
     }
+
+    if allocated_only {
+        return dump_allocated_only(&mut reader, output, recover);
+    }
+
     let disk_size = reader.virtual_disk_size();
     let end = length.map_or(disk_size, |len| offset.saturating_add(len).min(disk_size));
     let to_output = end.saturating_sub(offset);
@@ -354,6 +358,60 @@ fn cmd_dump(
         }
         w.flush().ok();
     }
+    if recover {
+        if let Some(note) = recovery_note(reader.rgd_recovery_count()) {
+            eprintln!("{note}");
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+/// Write a sparse reconstruction: only allocated grains, each at its disk offset,
+/// leaving unallocated regions as file holes. Needs a seekable output file — a
+/// sparse image can't be produced on a pipe, so stdout is refused.
+fn dump_allocated_only(
+    reader: &mut VmdkFileReader,
+    output: Option<&std::path::Path>,
+    recover: bool,
+) -> ExitCode {
+    let Some(out_path) = output else {
+        return fail("error: --allocated-only requires --output (a seekable file)");
+    };
+    let disk_size = reader.virtual_disk_size();
+    let grains = match reader.iter_allocated_grains() {
+        Ok(g) => g,
+        Err(e) => return fail(format!("error: {e}")),
+    };
+    let mut file = match std::fs::File::create(out_path) {
+        Ok(f) => f,
+        Err(e) => return fail(format!("cannot create {}: {e}", out_path.display())),
+    };
+    // Establish full virtual size; unwritten ranges stay holes (sparse).
+    if let Err(e) = file.set_len(disk_size) {
+        return fail(format!("error: {e}"));
+    }
+    let mut written = 0u64;
+    for g in &grains {
+        let off = g.start_lba * 512;
+        let len = g.sector_count * 512;
+        if let Err(e) = reader.seek(SeekFrom::Start(off)) {
+            return fail(format!("seek error: {e}"));
+        }
+        if let Err(e) = file.seek(SeekFrom::Start(off)) {
+            return fail(format!("seek error: {e}"));
+        }
+        if let Err(e) = copy_n(reader, &mut file, len) {
+            return fail(format!("write error: {e}"));
+        }
+        written += len;
+    }
+    file.flush().ok();
+    eprintln!(
+        "Wrote {} allocated byte(s) into a {}-byte sparse image at {}",
+        fmt_commas(written),
+        fmt_commas(disk_size),
+        out_path.display()
+    );
     if recover {
         if let Some(note) = recovery_note(reader.rgd_recovery_count()) {
             eprintln!("{note}");
