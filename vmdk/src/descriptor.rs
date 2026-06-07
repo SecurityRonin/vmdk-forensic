@@ -231,9 +231,51 @@ fn split_token(s: &str) -> Option<(&str, &str)> {
     Some((&s[..end], &s[end..]))
 }
 
+/// Decode raw descriptor bytes to text, honoring a declared `ddb.encoding`.
+///
+/// VMDK descriptors may be written in a non-UTF-8 encoding (the spec lists
+/// `windows-1252`, `Shift_JIS`, `GBK`, `Big5`). The structural keywords are ASCII,
+/// so the declared encoding is recoverable from the raw bytes; the *values*
+/// (filenames, parent hints) may be non-ASCII. Decoding never silently empties:
+/// an undecodable byte becomes U+FFFD, not a dropped descriptor.
+pub(crate) fn decode_descriptor(bytes: &[u8]) -> String {
+    // RED stub — replaced by the encoding-aware decoder in the GREEN commit.
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    std::str::from_utf8(&bytes[..end]).unwrap_or("").to_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decode_windows_1252_descriptor_per_ddb_encoding() {
+        // 0xE9 = é and 0x80 = € in windows-1252. 0x80 is the discriminator: in
+        // windows-1252 it is the Euro sign (U+20AC), in Latin-1 a control char —
+        // so this proves a real cp1252 decode, not a naive byte cast.
+        let bytes = b"createType=\"monolithicFlat\"\nddb.encoding = \"windows-1252\"\nparentFileNameHint=\"caf\xE9\x80.vmdk\"\n";
+        let s = decode_descriptor(bytes);
+        assert!(s.contains('\u{00E9}'), "0xE9 -> é: {s:?}");
+        assert!(s.contains('\u{20AC}'), "0x80 -> € (cp1252, not Latin-1): {s:?}");
+        assert!(s.contains("monolithicFlat"), "ASCII structure preserved: {s:?}");
+    }
+
+    #[test]
+    fn decode_invalid_utf8_without_hint_is_lossy_not_empty() {
+        // No/unknown encoding declared + invalid UTF-8 → never silently empty;
+        // the ASCII structure survives and the bad byte becomes U+FFFD.
+        let bytes = b"createType=\"monolithicSparse\"\nname=\xE9 raw\n";
+        let s = decode_descriptor(bytes);
+        assert!(!s.is_empty(), "must never silently empty the descriptor");
+        assert!(s.contains("monolithicSparse"), "ASCII structure kept: {s:?}");
+        assert!(s.contains('\u{FFFD}'), "undecodable byte -> U+FFFD: {s:?}");
+    }
+
+    #[test]
+    fn decode_valid_utf8_unchanged() {
+        let s = decode_descriptor("createType=\"x\"\nlabel=café\n".as_bytes());
+        assert!(s.contains("café"), "valid UTF-8 round-trips: {s:?}");
+    }
 
     #[test]
     fn parse_two_gb_max_extent_flat_descriptor() {
