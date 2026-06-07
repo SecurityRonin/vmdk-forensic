@@ -576,8 +576,12 @@ struct ExamineOpts {
 /// is it sound?". It opens headers/metadata only (instant even on a huge image);
 /// the expensive full-disk fingerprint is a separate opt-in.
 fn examine_report(path: &std::path::Path, opts: ExamineOpts) -> Result<ExamineReport, String> {
-    let _ = opts.recover; // RED stub — RGD fallback wired in the GREEN commit.
     let mut reader = open(path)?;
+    if opts.recover {
+        // Resolve grains through the redundant grain directory when the primary GD
+        // is damaged, so the fingerprint can complete on a recoverable image.
+        reader.enable_rgd_fallback();
+    }
     let info = reader.info();
     let file_name = path
         .file_name()
