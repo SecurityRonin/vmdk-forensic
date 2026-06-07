@@ -46,6 +46,9 @@ struct Cli {
     /// Reads the whole virtual disk, so it is opt-in — examine is otherwise instant.
     #[arg(long, visible_alias = "fp")]
     fingerprint: bool,
+    /// Emit machine-readable JSON instead of the human-readable report.
+    #[arg(long, global = true)]
+    json: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -551,14 +554,26 @@ struct ExamineReport {
     failed: bool,
 }
 
+/// Output options for the `examine` view, grouped so the call surface stays one
+/// argument as flags accumulate (fingerprint, json, …) rather than a row of bools.
+#[derive(Clone, Copy, Default)]
+struct ExamineOpts {
+    /// Append the (expensive) virtual-disk content fingerprint.
+    fingerprint: bool,
+    /// Emit machine-readable JSON instead of the human-readable report.
+    json: bool,
+}
+
 /// Build the one-shot `examine` view: identity, forensic findings, and a verdict.
 ///
 /// This is the no-subcommand default — the fast triage answer to "what is this and
 /// is it sound?". It opens headers/metadata only (instant even on a huge image);
 /// the expensive full-disk fingerprint is a separate opt-in.
-fn examine_report(path: &std::path::Path, fingerprint: bool) -> Result<ExamineReport, String> {
+fn examine_report(path: &std::path::Path, opts: ExamineOpts) -> Result<ExamineReport, String> {
     use std::fmt::Write as _;
 
+    let fingerprint = opts.fingerprint;
+    let _ = opts.json; // RED stub — JSON rendering added in the GREEN commit.
     let mut reader = open(path)?;
     let info = reader.info();
     let mut text = String::new();
@@ -717,8 +732,8 @@ fn examine_report(path: &std::path::Path, fingerprint: bool) -> Result<ExamineRe
 /// Print the `examine` report and map its verdict to an exit code: a `High`+
 /// finding (or a failed analysis) yields failure, so scripts get a pass/fail
 /// signal for free without a separate command.
-fn cmd_examine(path: &std::path::Path, fingerprint: bool) -> ExitCode {
-    match examine_report(path, fingerprint) {
+fn cmd_examine(path: &std::path::Path, opts: ExamineOpts) -> ExitCode {
+    match examine_report(path, opts) {
         Ok(report) => {
             print!("{}", report.text);
             if report.failed {
@@ -809,7 +824,13 @@ fn main() -> ExitCode {
         Some(Command::Diff { a, b }) => cmd_diff(a, b),
         // No subcommand → examine the given image (the default triage view).
         None => match cli.path.as_deref() {
-            Some(path) => cmd_examine(path, cli.fingerprint),
+            Some(path) => cmd_examine(
+                path,
+                ExamineOpts {
+                    fingerprint: cli.fingerprint,
+                    json: cli.json,
+                },
+            ),
             None => fail("error: provide a VMDK image to examine, or a subcommand (see --help)"),
         },
     }
@@ -1186,7 +1207,7 @@ mod tests {
 
     #[test]
     fn examine_clean_image_shows_identity_and_passes() {
-        let r = examine_report(&data("dfvfs_ext2.vmdk"), false).expect("examine a clean image");
+        let r = examine_report(&data("dfvfs_ext2.vmdk"), ExamineOpts::default()).expect("examine a clean image");
         assert!(!r.failed, "a clean image is not a failure: {}", r.text);
         assert!(
             r.text.contains("VMDK"),
@@ -1207,7 +1228,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("dangling.vmdk");
         std::fs::write(&p, opens_but_gt_and_rgd_dangle()).unwrap();
-        let r = examine_report(&p, false).expect("examine opens the image");
+        let r = examine_report(&p, ExamineOpts::default()).expect("examine opens the image");
         assert!(r.failed, "a High-severity anomaly fails the verdict: {}", r.text);
         assert!(
             r.text.contains("VMDK-DANGLING") || r.text.to_uppercase().contains("DANGLING"),
@@ -1217,10 +1238,49 @@ mod tests {
     }
 
     #[test]
+    fn examine_json_is_valid_and_structured() {
+        // --json must emit parseable JSON carrying the key sections (format, findings,
+        // verdict) so it composes into a pipeline / SIEM.
+        let r = examine_report(
+            &data("dfvfs_ext2.vmdk"),
+            ExamineOpts {
+                json: true,
+                ..Default::default()
+            },
+        )
+        .expect("examine --json");
+        let v: serde_json::Value =
+            serde_json::from_str(&r.text).expect("output is valid JSON");
+        assert!(v.get("format").is_some(), "has format: {}", r.text);
+        assert!(v.get("findings").is_some(), "has findings array: {}", r.text);
+        assert!(v.get("failed").is_some(), "has verdict: {}", r.text);
+    }
+
+    #[test]
+    fn examine_json_includes_fingerprint_when_requested() {
+        let r = examine_report(
+            &data("minimal.vmdk"),
+            ExamineOpts {
+                json: true,
+                fingerprint: true,
+            },
+        )
+        .expect("examine --json --fp");
+        let v: serde_json::Value = serde_json::from_str(&r.text).expect("valid JSON");
+        assert!(
+            v.get("fingerprint")
+                .and_then(|f| f.get("sha256"))
+                .is_some(),
+            "fingerprint.sha256 present: {}",
+            r.text
+        );
+    }
+
+    #[test]
     fn examine_fingerprint_flag_appends_labelled_hashes() {
         let p = data("dfvfs_ext2.vmdk");
         // Without the flag: no hash (examine stays instant).
-        let plain = examine_report(&p, false).expect("examine");
+        let plain = examine_report(&p, ExamineOpts::default()).expect("examine");
         assert!(
             !plain.text.contains("SHA-256"),
             "no fingerprint without the flag: {}",
@@ -1228,7 +1288,14 @@ mod tests {
         );
         // With the flag: SHA-256 + MD5, explicitly labelled as a virtual-disk
         // content fingerprint (not the container file, not per-extent artifacts).
-        let fp = examine_report(&p, true).expect("examine --fingerprint");
+        let fp = examine_report(
+            &p,
+            ExamineOpts {
+                fingerprint: true,
+                ..Default::default()
+            },
+        )
+        .expect("examine --fingerprint");
         assert!(fp.text.contains("SHA-256"), "shows SHA-256: {}", fp.text);
         assert!(fp.text.contains("MD5"), "shows MD5: {}", fp.text);
         assert!(
@@ -1243,7 +1310,7 @@ mod tests {
         // The examine view must carry the who/what/when an examiner needs: an
         // effective content ID and the header provenance flags (unclean shutdown,
         // FTP-mangling, redundant GD).
-        let r = examine_report(&data("dfvfs_ext2.vmdk"), false).expect("examine");
+        let r = examine_report(&data("dfvfs_ext2.vmdk"), ExamineOpts::default()).expect("examine");
         assert!(
             r.text.contains("Provenance"),
             "has a provenance section: {}",
@@ -1260,7 +1327,7 @@ mod tests {
     fn examine_lists_companion_files() {
         // flat.vmdk references flat-f001.vmdk — an acquisition handler must see
         // exactly which companion files to collect.
-        let r = examine_report(&data("flat.vmdk"), false).expect("examine multi-file");
+        let r = examine_report(&data("flat.vmdk"), ExamineOpts::default()).expect("examine multi-file");
         assert!(
             r.text.to_lowercase().contains("companion"),
             "lists companion files: {}",
@@ -1276,17 +1343,23 @@ mod tests {
     #[test]
     fn cmd_examine_exit_code_tracks_verdict() {
         // Clean image → success; dangling metadata → failure; garbage → failure.
-        assert!(is_success(cmd_examine(&data("dfvfs_ext2.vmdk"), false)));
+        assert!(is_success(cmd_examine(
+            &data("dfvfs_ext2.vmdk"),
+            ExamineOpts::default()
+        )));
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("dangling.vmdk");
         std::fs::write(&p, opens_but_gt_and_rgd_dangle()).unwrap();
         assert!(
-            !is_success(cmd_examine(&p, false)),
+            !is_success(cmd_examine(&p, ExamineOpts::default())),
             "High-severity finding → failure"
         );
         let g = dir.path().join("g.bin");
         std::fs::write(&g, b"nope").unwrap();
-        assert!(!is_success(cmd_examine(&g, false)), "garbage → failure");
+        assert!(
+            !is_success(cmd_examine(&g, ExamineOpts::default())),
+            "garbage → failure"
+        );
     }
 
     #[test]
@@ -1294,7 +1367,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let g = dir.path().join("g.bin");
         std::fs::write(&g, b"not a vmdk").unwrap();
-        assert!(examine_report(&g, false).is_err(), "garbage input is an error");
+        assert!(
+            examine_report(&g, ExamineOpts::default()).is_err(),
+            "garbage input is an error"
+        );
     }
 
     #[test]
