@@ -199,8 +199,7 @@ fn read_descriptor<R: Read + Seek>(
     let mut buf = vec![0u8; byte_len as usize];
     reader.read_exact(&mut buf)?;
 
-    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-    let text = std::str::from_utf8(&buf[..end]).unwrap_or("").to_owned();
+    let text = descriptor::decode_descriptor(&buf);
     descriptor::parse_text_descriptor(&text)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
 }
@@ -830,8 +829,10 @@ impl VmdkFileReader {
         };
 
         if first_byte == b'#' {
-            // Text descriptor: parse extents and route by createType.
-            let text = std::fs::read_to_string(path)?;
+            // Text descriptor: parse extents and route by createType. Decoded via
+            // the declared encoding (read raw, not read_to_string, so a non-UTF-8
+            // descriptor is decoded rather than rejected outright).
+            let text = descriptor::decode_descriptor(&std::fs::read(path)?);
             let desc = parse_text_descriptor(&text)?;
             let dir = path.parent().unwrap_or(Path::new("."));
 

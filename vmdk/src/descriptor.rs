@@ -239,9 +239,59 @@ fn split_token(s: &str) -> Option<(&str, &str)> {
 /// (filenames, parent hints) may be non-ASCII. Decoding never silently empties:
 /// an undecodable byte becomes U+FFFD, not a dropped descriptor.
 pub(crate) fn decode_descriptor(bytes: &[u8]) -> String {
-    // RED stub — replaced by the encoding-aware decoder in the GREEN commit.
+    // Embedded descriptors are NUL-padded to a sector boundary.
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-    std::str::from_utf8(&bytes[..end]).unwrap_or("").to_owned()
+    let bytes = &bytes[..end];
+
+    // The `ddb.encoding` declaration is itself ASCII, so it survives a lossy pass
+    // and can be read even when the body bytes are not valid UTF-8.
+    if declared_encoding(&String::from_utf8_lossy(bytes))
+        .is_some_and(|e| e.eq_ignore_ascii_case("windows-1252"))
+    {
+        return decode_windows_1252(bytes);
+    }
+
+    // UTF-8 (declared or default). Decode lossily on invalid input so a bad byte
+    // becomes U+FFFD rather than dropping the whole descriptor — fail visible, not
+    // silent. (Non-UTF-8 encodings other than windows-1252 — Shift_JIS/GBK/Big5 —
+    // degrade to lossy here rather than mojibake; full support would need a
+    // multibyte codec dependency.)
+    match std::str::from_utf8(bytes) {
+        Ok(s) => s.to_owned(),
+        Err(_) => String::from_utf8_lossy(bytes).into_owned(),
+    }
+}
+
+/// The value of a `…encoding … = "<label>"` line, if the descriptor declares one.
+fn declared_encoding(text: &str) -> Option<String> {
+    text.lines().find_map(|line| {
+        if !line.to_ascii_lowercase().contains("encoding") {
+            return None;
+        }
+        let (_, rhs) = line.split_once('=')?;
+        let value = rhs.trim().trim_matches('"').trim();
+        (!value.is_empty()).then(|| value.to_string())
+    })
+}
+
+/// Decode windows-1252 (CP-1252) bytes. 0x00–0x7F are ASCII and 0xA0–0xFF map to
+/// U+00A0–U+00FF (Latin-1); 0x80–0x9F carry the CP-1252-specific punctuation
+/// (undefined slots map to their C1 control code point, matching the WHATWG table).
+fn decode_windows_1252(bytes: &[u8]) -> String {
+    const C1: [char; 32] = [
+        '\u{20AC}', '\u{0081}', '\u{201A}', '\u{0192}', '\u{201E}', '\u{2026}', '\u{2020}',
+        '\u{2021}', '\u{02C6}', '\u{2030}', '\u{0160}', '\u{2039}', '\u{0152}', '\u{008D}',
+        '\u{017D}', '\u{008F}', '\u{0090}', '\u{2018}', '\u{2019}', '\u{201C}', '\u{201D}',
+        '\u{2022}', '\u{2013}', '\u{2014}', '\u{02DC}', '\u{2122}', '\u{0161}', '\u{203A}',
+        '\u{0153}', '\u{009D}', '\u{017E}', '\u{0178}',
+    ];
+    bytes
+        .iter()
+        .map(|&b| match b {
+            0x80..=0x9F => C1[(b - 0x80) as usize],
+            _ => b as char,
+        })
+        .collect()
 }
 
 #[cfg(test)]
