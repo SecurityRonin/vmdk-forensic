@@ -583,20 +583,94 @@ fn examine_report(path: &std::path::Path) -> Result<ExamineReport, String> {
         let _ = writeln!(text, "Parent CID:        {:08x}", info.parent_cid);
     }
 
-    // Forensic findings come from vmdk-forensic, which reparses the raw image.
-    // An analysis error is itself a failed verdict — surfaced, never swallowed.
+    // Forensic findings + header provenance come from vmdk-forensic, which reparses
+    // the raw image. An analysis error is itself a failed verdict — surfaced, never
+    // swallowed.
     let mut failed = false;
-    let findings = match std::fs::File::open(path) {
-        Ok(f) => match vmdk_forensic::VmdkIntegrity::new(f).analyse() {
-            Ok(v) => v,
-            Err(e) => {
-                failed = true;
-                let _ = writeln!(text, "\nIntegrity: ERROR — {e}");
-                Vec::new()
-            }
-        },
+    let (header_prov, findings) = match std::fs::File::open(path) {
+        Ok(f) => {
+            let mut integ = vmdk_forensic::VmdkIntegrity::new(f);
+            let hp = integ.header_provenance().ok().flatten();
+            let fs = match integ.analyse() {
+                Ok(v) => v,
+                Err(e) => {
+                    failed = true;
+                    let _ = writeln!(text, "\nIntegrity: ERROR — {e}");
+                    Vec::new()
+                }
+            };
+            (hp, fs)
+        }
         Err(e) => return Err(format!("error: {e}")),
     };
+
+    // ── Provenance: who/what/when made this image (ddb.* + header flags) ──
+    let _ = writeln!(text, "\nProvenance:");
+    let _ = writeln!(text, "  Content ID:       {}", reader.effective_content_id());
+    let ddb = reader.disk_database();
+    if let Some(a) = &ddb.adapter_type {
+        let _ = writeln!(text, "  Adapter:          {a}");
+    }
+    if let Some(g) = &ddb.geometry {
+        let _ = writeln!(
+            text,
+            "  Geometry (C/H/S): {}/{}/{}",
+            g.cylinders, g.heads, g.sectors
+        );
+    }
+    if let Some(v) = &ddb.virtual_hw_version {
+        let _ = writeln!(text, "  HW version:       {v}");
+    }
+    if let Some(t) = &ddb.tools_version {
+        let _ = writeln!(text, "  Tools version:    {t}");
+    }
+    if let Some(u) = &ddb.uuid {
+        let _ = writeln!(text, "  UUID:             {u}");
+    }
+    if let Some(tp) = ddb.thin_provisioned {
+        let _ = writeln!(
+            text,
+            "  Provisioning:     {}",
+            if tp { "thin" } else { "thick" }
+        );
+    }
+    if let Some(e) = &ddb.encoding {
+        let _ = writeln!(text, "  Encoding:         {e}");
+    }
+    if let Some(cbt) = reader.change_track_path() {
+        let _ = writeln!(text, "  CBT file:         {cbt}");
+    }
+    if let Some(hp) = header_prov {
+        let _ = writeln!(
+            text,
+            "  Clean shutdown:   {}",
+            if hp.unclean_shutdown { "no" } else { "yes" }
+        );
+        let _ = writeln!(
+            text,
+            "  Redundant GD:     {}",
+            if hp.uses_redundant_gd {
+                "present"
+            } else {
+                "absent"
+            }
+        );
+    }
+
+    // Companion extent files an examiner must collect alongside this descriptor.
+    if let Ok(deps) = VmdkFileReader::extent_dependencies(path) {
+        if !deps.is_empty() {
+            let _ = writeln!(text, "  Companion files:  {} extent(s) required:", deps.len());
+            for d in &deps {
+                let name = d.file_name().map_or_else(
+                    || d.to_string_lossy().into_owned(),
+                    |n| n.to_string_lossy().into_owned(),
+                );
+                let present = if d.exists() { "" } else { "  (MISSING)" };
+                let _ = writeln!(text, "                    - {name}{present}");
+            }
+        }
+    }
 
     if findings.is_empty() {
         if !failed {
