@@ -570,20 +570,152 @@ struct ExamineOpts {
 /// is it sound?". It opens headers/metadata only (instant even on a huge image);
 /// the expensive full-disk fingerprint is a separate opt-in.
 fn examine_report(path: &std::path::Path, opts: ExamineOpts) -> Result<ExamineReport, String> {
-    use std::fmt::Write as _;
-
-    let fingerprint = opts.fingerprint;
-    let _ = opts.json; // RED stub — JSON rendering added in the GREEN commit.
     let mut reader = open(path)?;
     let info = reader.info();
-    let mut text = String::new();
     let file_name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
+
+    // ── Gather (once) — so text and JSON render from the same data ──
+    // Forensic findings + header provenance come from vmdk-forensic, which reparses
+    // the raw image. An analysis error is itself a failed verdict — surfaced, never
+    // swallowed.
+    let mut failed = false;
+    let mut analyse_err: Option<String> = None;
+    let (header_prov, findings) = match std::fs::File::open(path) {
+        Ok(f) => {
+            let mut integ = vmdk_forensic::VmdkIntegrity::new(f);
+            let hp = integ.header_provenance().ok().flatten();
+            let fs = match integ.analyse() {
+                Ok(v) => v,
+                Err(e) => {
+                    failed = true;
+                    analyse_err = Some(e.to_string());
+                    Vec::new()
+                }
+            };
+            (hp, fs)
+        }
+        Err(e) => return Err(format!("error: {e}")),
+    };
+    if findings
+        .iter()
+        .any(|f| f.severity >= Some(forensicnomicon::report::Severity::High))
+    {
+        failed = true;
+    }
+
+    let content_id = reader.effective_content_id();
+    let ddb = reader.disk_database();
+    let cbt = reader.change_track_path();
+    let deps = VmdkFileReader::extent_dependencies(path).unwrap_or_default();
+
+    // Virtual-disk content fingerprint (opt-in: reads the whole disk).
+    let fingerprint: Option<Result<(String, String), String>> = if opts.fingerprint {
+        reader.seek(SeekFrom::Start(0)).ok();
+        match reader.hash() {
+            Ok(d) => Some(Ok((d.sha256, d.md5))),
+            Err(e) => {
+                failed = true;
+                Some(Err(e.to_string()))
+            }
+        }
+    } else {
+        None
+    };
+
+    // ── Render ──
+    let text = if opts.json {
+        let cid = (info.cid != 0xffff_ffff).then(|| format!("{:08x}", info.cid));
+        let parent_cid =
+            (info.parent_cid != 0xffff_ffff).then(|| format!("{:08x}", info.parent_cid));
+        let geometry = ddb.geometry.map(|g| {
+            serde_json::json!({ "cylinders": g.cylinders, "heads": g.heads, "sectors": g.sectors })
+        });
+        let companion: Vec<_> = deps
+            .iter()
+            .map(|d| {
+                let name = d.file_name().map_or_else(
+                    || d.to_string_lossy().into_owned(),
+                    |n| n.to_string_lossy().into_owned(),
+                );
+                serde_json::json!({ "name": name, "present": d.exists() })
+            })
+            .collect();
+        let fp_json = fingerprint.as_ref().map(|r| match r {
+            Ok((sha256, md5)) => serde_json::json!({ "sha256": sha256, "md5": md5 }),
+            Err(e) => serde_json::json!({ "error": e }),
+        });
+        let value = serde_json::json!({
+            "file": file_name,
+            "format": { "version": info.version, "disk_type": info.disk_type },
+            "virtual_disk_size": info.virtual_disk_size,
+            "sectors": info.sector_count,
+            "cid": cid,
+            "parent_cid": parent_cid,
+            "provenance": {
+                "content_id": content_id,
+                "adapter": ddb.adapter_type,
+                "geometry": geometry,
+                "virtual_hw_version": ddb.virtual_hw_version,
+                "tools_version": ddb.tools_version,
+                "uuid": ddb.uuid,
+                "thin_provisioned": ddb.thin_provisioned,
+                "encoding": ddb.encoding,
+                "cbt_file": cbt,
+                "unclean_shutdown": header_prov.map(|h| h.unclean_shutdown),
+                "uses_redundant_gd": header_prov.map(|h| h.uses_redundant_gd),
+            },
+            "companion_files": companion,
+            "findings": findings,
+            "analyse_error": analyse_err,
+            "fingerprint": fp_json,
+            "failed": failed,
+        });
+        serde_json::to_string_pretty(&value).unwrap_or_default()
+    } else {
+        render_examine_text(&ExamineText {
+            file_name: &file_name,
+            info: &info,
+            content_id: &content_id,
+            ddb: &ddb,
+            cbt: cbt.as_deref(),
+            header_prov: header_prov.as_ref(),
+            deps: &deps,
+            findings: &findings,
+            analyse_err: analyse_err.as_deref(),
+            fingerprint: fingerprint.as_ref(),
+            failed,
+        })
+    };
+
+    Ok(ExamineReport { text, failed })
+}
+
+/// Everything the human `examine` renderer needs, borrowed from the gather phase.
+struct ExamineText<'a> {
+    file_name: &'a str,
+    info: &'a vmdk::VmdkInfo,
+    content_id: &'a str,
+    ddb: &'a vmdk::DiskDatabase,
+    cbt: Option<&'a str>,
+    header_prov: Option<&'a vmdk_forensic::HeaderProvenance>,
+    deps: &'a [PathBuf],
+    findings: &'a [forensicnomicon::report::Finding],
+    analyse_err: Option<&'a str>,
+    fingerprint: Option<&'a Result<(String, String), String>>,
+    failed: bool,
+}
+
+/// Render the human-readable `examine` report from gathered data.
+fn render_examine_text(d: &ExamineText) -> String {
+    use std::fmt::Write as _;
+    let info = d.info;
+    let mut text = String::new();
     let mib = info.virtual_disk_size as f64 / (1024.0 * 1024.0);
 
-    let _ = writeln!(text, "File:              {file_name}");
+    let _ = writeln!(text, "File:              {}", d.file_name);
     let _ = writeln!(
         text,
         "Format:            VMDK v{} ({})",
@@ -602,31 +734,10 @@ fn examine_report(path: &std::path::Path, opts: ExamineOpts) -> Result<ExamineRe
         let _ = writeln!(text, "Parent CID:        {:08x}", info.parent_cid);
     }
 
-    // Forensic findings + header provenance come from vmdk-forensic, which reparses
-    // the raw image. An analysis error is itself a failed verdict — surfaced, never
-    // swallowed.
-    let mut failed = false;
-    let (header_prov, findings) = match std::fs::File::open(path) {
-        Ok(f) => {
-            let mut integ = vmdk_forensic::VmdkIntegrity::new(f);
-            let hp = integ.header_provenance().ok().flatten();
-            let fs = match integ.analyse() {
-                Ok(v) => v,
-                Err(e) => {
-                    failed = true;
-                    let _ = writeln!(text, "\nIntegrity: ERROR — {e}");
-                    Vec::new()
-                }
-            };
-            (hp, fs)
-        }
-        Err(e) => return Err(format!("error: {e}")),
-    };
-
     // ── Provenance: who/what/when made this image (ddb.* + header flags) ──
+    let ddb = d.ddb;
     let _ = writeln!(text, "\nProvenance:");
-    let _ = writeln!(text, "  Content ID:       {}", reader.effective_content_id());
-    let ddb = reader.disk_database();
+    let _ = writeln!(text, "  Content ID:       {}", d.content_id);
     if let Some(a) = &ddb.adapter_type {
         let _ = writeln!(text, "  Adapter:          {a}");
     }
@@ -656,10 +767,10 @@ fn examine_report(path: &std::path::Path, opts: ExamineOpts) -> Result<ExamineRe
     if let Some(e) = &ddb.encoding {
         let _ = writeln!(text, "  Encoding:         {e}");
     }
-    if let Some(cbt) = reader.change_track_path() {
+    if let Some(cbt) = d.cbt {
         let _ = writeln!(text, "  CBT file:         {cbt}");
     }
-    if let Some(hp) = header_prov {
+    if let Some(hp) = d.header_prov {
         let _ = writeln!(
             text,
             "  Clean shutdown:   {}",
@@ -677,56 +788,53 @@ fn examine_report(path: &std::path::Path, opts: ExamineOpts) -> Result<ExamineRe
     }
 
     // Companion extent files an examiner must collect alongside this descriptor.
-    if let Ok(deps) = VmdkFileReader::extent_dependencies(path) {
-        if !deps.is_empty() {
-            let _ = writeln!(text, "  Companion files:  {} extent(s) required:", deps.len());
-            for d in &deps {
-                let name = d.file_name().map_or_else(
-                    || d.to_string_lossy().into_owned(),
-                    |n| n.to_string_lossy().into_owned(),
-                );
-                let present = if d.exists() { "" } else { "  (MISSING)" };
-                let _ = writeln!(text, "                    - {name}{present}");
-            }
+    if !d.deps.is_empty() {
+        let _ = writeln!(
+            text,
+            "  Companion files:  {} extent(s) required:",
+            d.deps.len()
+        );
+        for dep in d.deps {
+            let name = dep.file_name().map_or_else(
+                || dep.to_string_lossy().into_owned(),
+                |n| n.to_string_lossy().into_owned(),
+            );
+            let present = if dep.exists() { "" } else { "  (MISSING)" };
+            let _ = writeln!(text, "                    - {name}{present}");
         }
     }
 
-    if findings.is_empty() {
-        if !failed {
+    // ── Verdict ──
+    if let Some(e) = d.analyse_err {
+        let _ = writeln!(text, "\nIntegrity: ERROR — {e}");
+    } else if d.findings.is_empty() {
+        if !d.failed {
             let _ = writeln!(text, "\nIntegrity: OK (no anomalies detected)");
         }
     } else {
-        let _ = writeln!(text, "\nFindings ({}):", findings.len());
-        for fnd in &findings {
+        let _ = writeln!(text, "\nFindings ({}):", d.findings.len());
+        for fnd in d.findings {
             let sev = fnd
                 .severity
                 .map_or_else(|| "—".to_string(), |s| s.to_string());
             let _ = writeln!(text, "  [{sev}] {} — {}", fnd.code, fnd.note);
-            if fnd.severity >= Some(forensicnomicon::report::Severity::High) {
-                failed = true;
-            }
         }
     }
 
-    // Virtual-disk content fingerprint (opt-in: reads the whole disk). Labelled
-    // explicitly so a custody manifest can't confuse it with the container file or
-    // per-extent artifact hashes.
-    if fingerprint {
-        reader.seek(SeekFrom::Start(0)).ok();
-        match reader.hash() {
-            Ok(d) => {
+    if let Some(fp) = d.fingerprint {
+        match fp {
+            Ok((sha256, md5)) => {
                 let _ = writeln!(text, "\nVirtual-disk content fingerprint:");
-                let _ = writeln!(text, "  SHA-256  {}", d.sha256);
-                let _ = writeln!(text, "  MD5      {}", d.md5);
+                let _ = writeln!(text, "  SHA-256  {sha256}");
+                let _ = writeln!(text, "  MD5      {md5}");
             }
             Err(e) => {
-                failed = true;
                 let _ = writeln!(text, "\nVirtual-disk content fingerprint: ERROR — {e}");
             }
         }
     }
 
-    Ok(ExamineReport { text, failed })
+    text
 }
 
 /// Print the `examine` report and map its verdict to an exit code: a `High`+
