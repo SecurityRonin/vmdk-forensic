@@ -15,7 +15,7 @@ name = "vmdk"
 path = "src/main.rs"
 
 [dependencies]
-vmdk = { version = "0.6.0", path = "../vmdk" }
+vmdk = { version = "0.6.3", path = "../vmdk", package = "vmdk-core" }
 vmdk-forensic = { version = "0.6.0", path = "../vmdk-forensic" }
 # Canonical reporting vocabulary (Severity/Finding/Category) — every fleet crate
 # that touches reporting depends on forensicnomicon directly, the single source of truth.
@@ -28,7 +28,7 @@ serde_json = "1"
 tempfile = "3"
 # test-helpers exposes vmdk::testutil so e2e tests can synthesise fixtures
 # (deltas, matching-RGD images, differing-content pairs) for full CLI coverage.
-vmdk = { version = "0.6.0", path = "../vmdk", features = ["test-helpers"] }
+vmdk = { version = "0.6.3", path = "../vmdk", package = "vmdk-core", features = ["test-helpers"] }
 
 [lints]
 workspace = true

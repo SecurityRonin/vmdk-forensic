@@ -1,6 +1,6 @@
 [package]
-name         = "vmdk"
-version      = "0.6.2"
+name         = "vmdk-core"
+version      = "0.6.3"
 edition      = "2021"
 rust-version = "1.85"
 description  = "Pure-Rust read-only VMware VMDK disk image reader (monolithicSparse, streamOptimized, twoGbMaxExtentFlat/Sparse, monolithicFlat)"
@@ -8,9 +8,9 @@ license      = "MIT"
 authors      = ["Albert Hui"]
 keywords     = ["forensics", "vmdk", "disk-image", "vmware", "container"]
 categories   = ["parser-implementations", "filesystem"]
-repository   = "https://github.com/SecurityRonin/vmdk"
-homepage     = "https://github.com/SecurityRonin/vmdk"
-documentation = "https://docs.rs/vmdk"
+repository   = "https://github.com/SecurityRonin/vmdk-core"
+homepage     = "https://github.com/SecurityRonin/vmdk-core"
+documentation = "https://docs.rs/vmdk-core"
 readme       = "../README.md"
 exclude      = ["tests/data/", "fuzz/"]
 
@@ -27,6 +27,9 @@ trace = ["dep:tracing"]
 [[example]]
 name = "emit_fixture"
 required-features = ["test-helpers"]
+
+[lib]
+name = "vmdk"
 
 [dependencies]
 encoding_rs = { version = "0.8", optional = true }
