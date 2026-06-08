@@ -1,6 +1,6 @@
 [package]
 name         = "vmdk"
-version      = "0.6.1"
+version      = "0.6.2"
 edition      = "2021"
 rust-version = "1.85"
 description  = "Pure-Rust read-only VMware VMDK disk image reader (monolithicSparse, streamOptimized, twoGbMaxExtentFlat/Sparse, monolithicFlat)"
@@ -19,7 +19,7 @@ test-helpers = []
 serde = ["dep:serde"]
 # Full multibyte descriptor decoding (Shift_JIS / GBK / Big5 / …) via `encoding_rs`.
 # Off by default — the default build decodes UTF-8 + windows-1252 dependency-free.
-full-encoding = []
+full-encoding = ["dep:encoding_rs"]
 # Forward internal diagnostics to the `tracing` ecosystem for structured,
 # level-filtered debugging over untrusted images. Off by default — zero logging dep.
 trace = ["dep:tracing"]
@@ -29,6 +29,7 @@ name = "emit_fixture"
 required-features = ["test-helpers"]
 
 [dependencies]
+encoding_rs = { version = "0.8", optional = true }
 thiserror = "2"
 tracing   = { version = "0.1", optional = true }
 flate2    = "1"

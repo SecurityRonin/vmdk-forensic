@@ -264,11 +264,18 @@ fn decode_bytes(bytes: &[u8], label: Option<&str>) -> String {
     }
 }
 
-/// RED stub for the `full-encoding` path — replaced by the `encoding_rs` decoder in
-/// the GREEN commit. Falls back to lossy so the `Shift_JIS` test fails.
+/// Full decoder (`full-encoding` feature): decode per the declared `ddb.encoding`
+/// using `encoding_rs`, covering the WHATWG label set (`windows-1252`,
+/// `Shift_JIS`, `GBK`, `Big5`, `UTF-8`, …). An unrecognized/absent label defaults
+/// to UTF-8; undecodable bytes become U+FFFD (never a dropped descriptor). The
+/// declared encoding is honored verbatim — no BOM sniffing overrides it.
 #[cfg(feature = "full-encoding")]
-fn decode_bytes(bytes: &[u8], _label: Option<&str>) -> String {
-    String::from_utf8_lossy(bytes).into_owned()
+fn decode_bytes(bytes: &[u8], label: Option<&str>) -> String {
+    let encoding = label
+        .and_then(|l| encoding_rs::Encoding::for_label(l.as_bytes()))
+        .unwrap_or(encoding_rs::UTF_8);
+    let (decoded, _had_errors) = encoding.decode_without_bom_handling(bytes);
+    decoded.into_owned()
 }
 
 /// The value of a `…encoding … = "<label>"` line, if the descriptor declares one.
