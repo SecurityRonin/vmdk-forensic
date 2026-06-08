@@ -1,6 +1,6 @@
 [package]
 name         = "vmdk-forensic"
-version      = "0.6.1"
+version      = "0.6.2"
 edition      = "2021"
 rust-version = "1.85"
 description  = "Forensic integrity analysis for VMware VMDK images — redundant-grain-directory adjudication, dangling-pointer scan, recovery triage, and header provenance"

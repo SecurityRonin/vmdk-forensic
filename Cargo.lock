@@ -749,24 +749,8 @@ dependencies = [
  "forensicnomicon",
  "serde_json",
  "tempfile",
- "vmdk-core 0.6.3",
+ "vmdk-core 0.6.4",
  "vmdk-forensic",
-]
-
-[[package]]
-name = "vmdk-core"
-version = "0.6.3"
-dependencies = [
- "encoding_rs",
- "flate2",
- "md-5",
- "proptest",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "tracing",
 ]
 
 [[package]]
@@ -783,12 +767,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "vmdk-core"
+version = "0.6.4"
+dependencies = [
+ "encoding_rs",
+ "flate2",
+ "md-5",
+ "proptest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "vmdk-forensic"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "forensicnomicon",
  "serde",
- "vmdk-core 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "vmdk-core 0.6.3",
 ]
 
 [[package]]
