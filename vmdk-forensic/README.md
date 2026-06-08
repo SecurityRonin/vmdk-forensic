@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/vmdk-forensic.svg)](https://crates.io/crates/vmdk-forensic)
 [![docs.rs](https://img.shields.io/docsrs/vmdk-forensic)](https://docs.rs/vmdk-forensic)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/SecurityRonin/vmdk/actions/workflows/ci.yml/badge.svg)](https://github.com/SecurityRonin/vmdk/actions)
+[![CI](https://github.com/SecurityRonin/vmdk-core/actions/workflows/ci.yml/badge.svg)](https://github.com/SecurityRonin/vmdk-core/actions)
 [![Sponsor](https://img.shields.io/badge/sponsor-h4x0r-ea4aaa?logo=github-sponsors)](https://github.com/sponsors/h4x0r)
 
 Forensic integrity analysis for VMware VMDK images. The evidence-grade layer on top of the [`vmdk`](https://crates.io/crates/vmdk) reader — it **reparses the raw structure** (so it works on images too damaged to open cleanly) and reports the redundant-grain-directory, dangling-pointer, recovery, and header-provenance findings that `qemu-img` and `libvmdk` discard.
@@ -92,4 +92,4 @@ allocation; the grain-directory size is capped; zero `unsafe`.
 
 ---
 
-[Privacy Policy](https://securityronin.github.io/vmdk/privacy/) · [Terms of Service](https://securityronin.github.io/vmdk/terms/) · © 2026 Security Ronin Ltd
+[Privacy Policy](https://securityronin.github.io/vmdk-core/privacy/) · [Terms of Service](https://securityronin.github.io/vmdk-core/terms/) · © 2026 Security Ronin Ltd

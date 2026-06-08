@@ -1,0 +1,248 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e6]:
+      - heading "Navigation Menu" [level=2] [ref=e7]
+      - generic [ref=e8]:
+        - link "Homepage" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - img [ref=e11]
+        - generic [ref=e13]:
+          - navigation "Global" [ref=e16]:
+            - list [ref=e17]:
+              - listitem [ref=e18]:
+                - button "Platform" [ref=e20] [cursor=pointer]:
+                  - text: Platform
+                  - img [ref=e21]
+              - listitem [ref=e23]:
+                - button "Solutions" [ref=e25] [cursor=pointer]:
+                  - text: Solutions
+                  - img [ref=e26]
+              - listitem [ref=e28]:
+                - button "Resources" [ref=e30] [cursor=pointer]:
+                  - text: Resources
+                  - img [ref=e31]
+              - listitem [ref=e33]:
+                - button "Open Source" [ref=e35] [cursor=pointer]:
+                  - text: Open Source
+                  - img [ref=e36]
+              - listitem [ref=e38]:
+                - button "Enterprise" [ref=e40] [cursor=pointer]:
+                  - text: Enterprise
+                  - img [ref=e41]
+              - listitem [ref=e43]:
+                - link "Pricing" [ref=e44] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+                  - generic [ref=e45]: Pricing
+          - generic [ref=e46]:
+            - button "Search or jump to…" [ref=e49] [cursor=pointer]:
+              - img [ref=e51]
+            - link "Sign in" [ref=e54] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Flibyal%2Flibvmdk%2Freleases
+            - link "Sign up" [ref=e55] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Freleases%2Findex&source=header-repo&source_repo=libyal%2Flibvmdk
+            - button "Appearance settings" [ref=e58] [cursor=pointer]:
+              - img
+  - main [ref=e62]:
+    - generic [ref=e63]:
+      - generic [ref=e64]:
+        - generic [ref=e66]:
+          - img [ref=e67]
+          - link "libyal" [ref=e70] [cursor=pointer]:
+            - /url: /libyal
+          - generic [ref=e71]: /
+          - strong [ref=e72]:
+            - link "libvmdk" [ref=e73] [cursor=pointer]:
+              - /url: /libyal/libvmdk
+          - generic [ref=e74]: Public
+        - generic [ref=e75]:
+          - list:
+            - listitem [ref=e76]:
+              - link "You must be signed in to change notification settings" [ref=e77] [cursor=pointer]:
+                - /url: /login?return_to=%2Flibyal%2Flibvmdk
+                - img [ref=e78]
+                - text: Notifications
+            - listitem [ref=e80]:
+              - link "Fork 72" [ref=e81] [cursor=pointer]:
+                - /url: /login?return_to=%2Flibyal%2Flibvmdk
+                - img [ref=e82]
+                - text: Fork
+                - generic "72" [ref=e84]
+            - listitem [ref=e85]:
+              - link "You must be signed in to star a repository" [ref=e87] [cursor=pointer]:
+                - /url: /login?return_to=%2Flibyal%2Flibvmdk
+                - img [ref=e88]
+                - text: Star
+                - generic "185 users starred this repository" [ref=e90]: "185"
+      - navigation "Repository" [ref=e91]:
+        - list [ref=e92]:
+          - listitem [ref=e93]:
+            - link "Code" [ref=e94] [cursor=pointer]:
+              - /url: /libyal/libvmdk
+              - img [ref=e95]
+              - generic [ref=e97]: Code
+          - listitem [ref=e98]:
+            - link "Issues 4" [ref=e99] [cursor=pointer]:
+              - /url: /libyal/libvmdk/issues
+              - img [ref=e100]
+              - generic [ref=e103]: Issues
+              - generic "4" [ref=e104]
+          - listitem [ref=e105]:
+            - link "Pull requests 1" [ref=e106] [cursor=pointer]:
+              - /url: /libyal/libvmdk/pulls
+              - img [ref=e107]
+              - generic [ref=e109]: Pull requests
+              - generic "1" [ref=e110]
+          - listitem [ref=e111]:
+            - link "Actions" [ref=e112] [cursor=pointer]:
+              - /url: /libyal/libvmdk/actions
+              - img [ref=e113]
+              - generic [ref=e115]: Actions
+          - listitem [ref=e116]:
+            - link "Projects" [ref=e117] [cursor=pointer]:
+              - /url: /libyal/libvmdk/projects
+              - img [ref=e118]
+              - generic [ref=e120]: Projects
+          - listitem [ref=e121]:
+            - link "Wiki" [ref=e122] [cursor=pointer]:
+              - /url: /libyal/libvmdk/wiki
+              - img [ref=e123]
+              - generic [ref=e125]: Wiki
+          - listitem [ref=e126]:
+            - link "Security and quality" [ref=e127] [cursor=pointer]:
+              - /url: /libyal/libvmdk/security
+              - img [ref=e128]
+              - generic [ref=e130]: Security and quality
+          - listitem [ref=e131]:
+            - link "Insights" [ref=e132] [cursor=pointer]:
+              - /url: /libyal/libvmdk/pulse
+              - img [ref=e133]
+              - generic [ref=e135]: Insights
+    - generic [ref=e137]:
+      - 'heading "Releases: libyal/libvmdk" [level=1] [ref=e138]'
+      - generic [ref=e139]:
+        - generic [ref=e141]:
+          - navigation "Releases and Tags" [ref=e142]:
+            - link "Releases" [ref=e143] [cursor=pointer]:
+              - /url: /libyal/libvmdk/releases
+            - link "Tags" [ref=e144] [cursor=pointer]:
+              - /url: /libyal/libvmdk/tags
+          - generic [ref=e147]:
+            - searchbox "Find a release" [ref=e148]
+            - img
+        - generic [ref=e149]:
+          - region "libvmdk-alpha-20240510" [ref=e150]:
+            - heading "libvmdk-alpha-20240510" [level=2] [ref=e151]
+            - generic [ref=e152]:
+              - generic [ref=e153]:
+                - generic [ref=e154]: 10 May 04:45 May 10, 2024
+                - generic [ref=e155]:
+                  - img "@joachimmetz" [ref=e156]
+                  - link "joachimmetz" [ref=e157] [cursor=pointer]:
+                    - /url: /joachimmetz
+                - link "Tag 20240510" [ref=e159] [cursor=pointer]:
+                  - /url: /libyal/libvmdk/tree/20240510
+                  - generic [ref=e160]:
+                    - img "Tag" [ref=e161]
+                    - text: "20240510"
+                - generic [ref=e163]:
+                  - link "Commit 34890e3" [ref=e164] [cursor=pointer]:
+                    - /url: /libyal/libvmdk/commit/34890e3d1cb34b06502ec789fbea764d38817207
+                    - img "Commit" [ref=e165]
+                    - code [ref=e167]: "34890e3"
+                  - group [ref=e168]:
+                    - generic "Verified commit signature" [ref=e169] [cursor=pointer]:
+                      - img "Verified commit signature" [ref=e170]
+                - button "Compare" [ref=e175] [cursor=pointer]:
+                  - generic [ref=e176]:
+                    - generic [ref=e177]: Compare
+                    - generic:
+                      - img
+              - generic [ref=e179]:
+                - generic [ref=e180]:
+                  - generic [ref=e183]:
+                    - link "libvmdk-alpha-20240510" [ref=e185] [cursor=pointer]:
+                      - /url: /libyal/libvmdk/releases/tag/20240510
+                    - generic [ref=e187]: Pre-release
+                  - paragraph [ref=e189]: Pre-release of version 20240510, for testing purposes
+                - group [ref=e193]:
+                  - button "Assets 4" [ref=e194] [cursor=pointer]:
+                    - generic [ref=e195]:
+                      - generic [ref=e196]: Assets
+                      - generic "4" [ref=e197]
+          - region "libvmdk-alpha-20240303" [ref=e199]:
+            - heading "libvmdk-alpha-20240303" [level=2] [ref=e200]
+            - generic [ref=e201]:
+              - generic [ref=e202]:
+                - generic [ref=e203]: 03 Mar 08:51 Mar 3, 2024
+                - generic [ref=e204]:
+                  - img "@joachimmetz" [ref=e205]
+                  - link "joachimmetz" [ref=e206] [cursor=pointer]:
+                    - /url: /joachimmetz
+                - link "Tag 20240303" [ref=e208] [cursor=pointer]:
+                  - /url: /libyal/libvmdk/tree/20240303
+                  - generic [ref=e209]:
+                    - img "Tag" [ref=e210]
+                    - text: "20240303"
+                - generic [ref=e212]:
+                  - link "Commit 5d8ce41" [ref=e213] [cursor=pointer]:
+                    - /url: /libyal/libvmdk/commit/5d8ce41f9b395afe34a159abd32403854b06b20f
+                    - img "Commit" [ref=e214]
+                    - code [ref=e216]: 5d8ce41
+                  - group [ref=e217]:
+                    - generic "Verified commit signature" [ref=e218] [cursor=pointer]:
+                      - img "Verified commit signature" [ref=e219]
+                - button "Compare" [ref=e224] [cursor=pointer]:
+                  - generic [ref=e225]:
+                    - generic [ref=e226]: Compare
+                    - generic:
+                      - img
+              - generic [ref=e228]:
+                - generic [ref=e229]:
+                  - generic [ref=e232]:
+                    - link "libvmdk-alpha-20240303" [ref=e234] [cursor=pointer]:
+                      - /url: /libyal/libvmdk/releases/tag/20240303
+                    - generic [ref=e236]: Pre-release
+                  - paragraph [ref=e238]: Pre-release of version 20240303, for testing purposes
+                - group [ref=e242]:
+                  - button "Assets 4" [ref=e243] [cursor=pointer]:
+                    - generic [ref=e244]:
+                      - generic [ref=e245]: Assets
+                      - generic "4" [ref=e246]
+  - contentinfo [ref=e248]:
+    - heading "Footer" [level=2] [ref=e249]
+    - generic [ref=e250]:
+      - generic [ref=e251]:
+        - link "GitHub Homepage" [ref=e252] [cursor=pointer]:
+          - /url: https://github.com
+          - img [ref=e253]
+        - generic [ref=e255]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=e256]:
+        - heading "Footer navigation" [level=3] [ref=e257]
+        - list "Footer navigation" [ref=e258]:
+          - listitem [ref=e259]:
+            - link "Terms" [ref=e260] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=e261]:
+            - link "Privacy" [ref=e262] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=e263]:
+            - link "Security" [ref=e264] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=e265]:
+            - link "Status" [ref=e266] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=e267]:
+            - link "Community" [ref=e268] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=e269]:
+            - link "Docs" [ref=e270] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=e271]:
+            - link "Contact" [ref=e272] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=e273]:
+            - button "Manage cookies" [ref=e275] [cursor=pointer]
+          - listitem [ref=e276]:
+            - button "Do not share my personal information" [ref=e278] [cursor=pointer]

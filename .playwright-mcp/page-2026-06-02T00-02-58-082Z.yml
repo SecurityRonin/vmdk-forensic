@@ -1,0 +1,286 @@
+- generic [active] [ref=e1]:
+  - link "Skip to main" [ref=e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - navigation [ref=e5]:
+        - generic [ref=e8]:
+          - link "Our Team" [ref=e9] [cursor=pointer]:
+            - /url: /our-team
+          - link "Testimonials" [ref=e10] [cursor=pointer]:
+            - /url: /testimonials
+          - link "Workstations" [ref=e11] [cursor=pointer]:
+            - /url: /workstations
+          - link "Contact" [ref=e12] [cursor=pointer]:
+            - /url: /contact
+          - link "FAQs" [ref=e13] [cursor=pointer]:
+            - /url: /faqs
+        - generic [ref=e16]:
+          - link "Arsenal Recon" [ref=e17] [cursor=pointer]:
+            - /url: /
+            - img "Arsenal Recon" [ref=e19]
+          - generic [ref=e20]:
+            - link "Products" [ref=e22] [cursor=pointer]:
+              - /url: /products
+            - link "Purchase" [ref=e24] [cursor=pointer]:
+              - /url: /pricing
+            - link "Downloads" [ref=e26] [cursor=pointer]:
+              - /url: /downloads
+            - link "Training" [ref=e28] [cursor=pointer]:
+              - /url: /training
+            - link "Insights" [ref=e30] [cursor=pointer]:
+              - /url: /insights
+    - generic [ref=e31]:
+      - generic [ref=e32]:
+        - link "" [ref=e33] [cursor=pointer]:
+          - /url: /
+        - text: /
+        - link "Insights" [ref=e34] [cursor=pointer]:
+          - /url: /insights
+        - generic [ref=e35]: / Publicly-Accessible Disk Images & Mobile Extractions Grid for DFIR
+      - generic [ref=e37]:
+        - generic [ref=e38]:
+          - heading "Publicly-Accessible Disk Images & Mobile Extractions Grid for DFIR" [level=1] [ref=e40]
+          - generic [ref=e41]:
+            - generic [ref=e42]:
+              - generic [ref=e43]: 
+              - text: September 25th, 2024
+            - generic [ref=e44]:
+              - generic [ref=e45]:
+                - img [ref=e46]
+                - generic [ref=e47]: Emina Doherty
+              - generic [ref=e48]:
+                - img [ref=e49]
+                - generic [ref=e50]: Anastasia Shek
+          - figure "Glimpse of Publicly-Accessible Disk Images and Mobile Extractions Grid for DFIR" [ref=e52]:
+            - img "Publicly-Accessible Disk Images & Mobile Extractions Grid for DFIR" [ref=e53]
+            - generic [ref=e54]: Glimpse of Publicly-Accessible Disk Images and Mobile Extractions Grid for DFIR
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - heading "“Does anyone know which publicly-accessible disk images contain (insert your artifact of interest)?”" [level=2] [ref=e58]:
+                - strong [ref=e59]:
+                  - emphasis [ref=e60]:
+                    - generic [ref=e61]: “Does anyone know which publicly-accessible disk images contain (insert your artifact of interest)?”
+              - paragraph
+              - paragraph [ref=e62]:
+                - generic [ref=e64]: We have been using publicly-accessible disk images for testing and training over many years. As we were testing internal builds of Arsenal Image Mounter toward the end of 2023, we started thinking about all the things about these disk images which would be nice to have in a single living spreadsheet… then we started thinking about how the entire digital forensics community could benefit from having this kind of spreadsheet online. So, here we are! We call this spreadsheet the “Publicly-Accessible Disk Images & Mobile Extractions Grid for DFIR.” The first version of our grid began with particular things we care about at Arsenal in terms of disk images containing Windows - for example, how many Volume Shadow Copies they contain, the names and types of their Windows accounts, and whether their hibernation files are actually populated with hibernation data. Later versions included mobile extractions and then disk images containing Linux.
+              - paragraph
+            - link "View Grid as a PDF (September 24, 2024 Update)" [ref=e66] [cursor=pointer]:
+              - /url: https://arsenalrecon-dev.s3.amazonaws.com/blog/publicly-accessible-disk-images-&-mobile-extractions-grid-for-dfir---september-24-2024-update.pdf
+            - link "Download Grid as an Excel Spreadsheet (September 24, 2024 Update)" [ref=e68] [cursor=pointer]:
+              - /url: https://arsenalrecon-dev.s3.amazonaws.com/blog/publicly-accessible-disk-images-&-mobile-extractions-grid-for-dfir---september-24-2024-update.xlsx
+            - generic [ref=e69]:
+              - paragraph [ref=e70]:
+                - generic [ref=e71]: Remember, this is a living spreadsheet! Please get in touch and tell us the kinds of things you would like to know about publicly-accessible disk images and mobile extractions, and we will see about adding them. Particular disk images and mobile extractions you think we should add? Particular artifacts we should add? Also, don’t be shy if you think we got something wrong, tell us - we can take it. Oh, and bookmark this page.
+              - paragraph [ref=e72]: "Change log:"
+              - paragraph [ref=e73]: September 24, 2024 - Added a Windows disk image, five more mobile extractions, and a new Linux disk images section
+              - paragraph [ref=e74]: May 28, 2024 - Added a new mobile extractions section
+              - paragraph [ref=e75]: March 21, 2024 - Added 13 more Windows disk images
+              - paragraph [ref=e76]: January 12, 2024 - Initial version
+              - separator [ref=e77]
+              - paragraph [ref=e78]:
+                - text: Are you running the latest version of Arsenal Image Mounter? Updates to v3.11.293 included an improved DPAPI bypass & new EFI boot cleanup option when launching Windows virtual machines from disk images or actual physical disks, Recon Report enhancements (e.g. simpler display of VSC timestamps), & more - see change log details at
+                - link "https://ArsenalRecon.com/downloads" [ref=e79] [cursor=pointer]:
+                  - /url: https://ArsenalRecon.com/downloads
+                - text: .
+          - generic [ref=e80]:
+            - text: "Published in:"
+            - link "News ," [ref=e81] [cursor=pointer]:
+              - /url: ""
+            - link "Training" [ref=e82] [cursor=pointer]:
+              - /url: ""
+          - generic [ref=e83]:
+            - text: "Share:"
+            - generic [ref=e84]:
+              - link "Share on Twitter" [ref=e86] [cursor=pointer]:
+                - /url: http://twitter.com/share?text=Publicly-Accessible Disk Images & Mobile Extractions Grid for DFIR&url=https://arsenalrecon.com/insights/publicly-accessible-disk-images-grid-for-dfir
+                - generic [ref=e87]:
+                  - generic [ref=e88]: 
+                  - generic [ref=e89]: 
+              - link "Share on Facebook" [ref=e91] [cursor=pointer]:
+                - /url: https://www.facebook.com/sharer/sharer.php?u=https://arsenalrecon.com/insights/publicly-accessible-disk-images-grid-for-dfir&t=Publicly-Accessible Disk Images & Mobile Extractions Grid for DFIR
+                - generic [ref=e92]:
+                  - generic [ref=e93]: 
+                  - generic [ref=e94]: 
+              - link "Share on LinkedIn" [ref=e96] [cursor=pointer]:
+                - /url: http://www.linkedin.com/shareArticle?mini=true&url=https://arsenalrecon.com/insights/publicly-accessible-disk-images-grid-for-dfir&title=Publicly-Accessible Disk Images & Mobile Extractions Grid for DFIR
+                - generic [ref=e97]:
+                  - generic [ref=e98]: 
+                  - generic [ref=e99]: 
+              - link "Share on Reddit" [ref=e101] [cursor=pointer]:
+                - /url: https://reddit.com/submit?url=https://arsenalrecon.com/insights/publicly-accessible-disk-images-grid-for-dfir&title=Publicly-Accessible Disk Images & Mobile Extractions Grid for DFIR
+                - generic [ref=e102]:
+                  - generic [ref=e103]: 
+                  - generic [ref=e104]: 
+        - generic [ref=e105]:
+          - generic [ref=e106]:
+            - generic [ref=e107]: Recent Posts
+            - list [ref=e108]:
+              - listitem [ref=e109]:
+                - link "Quick Tour Of New Features In Arsenal Image Mounter v3.12.331 11/01/2025" [ref=e110] [cursor=pointer]:
+                  - /url: /insights/quick-tour-of-new-features-in-arsenal-image-mounter-v3-12-331
+                  - generic [ref=e111]:
+                    - text: Quick Tour Of New Features In Arsenal Image Mounter v3.12.331
+                    - paragraph [ref=e112]: 11/01/2025
+              - link:
+                - /url: /insights/quick-tour-of-new-features-in-arsenal-image-mounter-v3-12-331
+              - listitem [ref=e114]:
+                - link:
+                  - /url: /insights/quick-tour-of-new-features-in-arsenal-image-mounter-v3-12-331
+                - link "Introducing AIM Remote Agent 03/11/2025" [ref=e115] [cursor=pointer]:
+                  - /url: /insights/introducing-aim-remote-agent
+                  - generic [ref=e116]:
+                    - text: Introducing AIM Remote Agent
+                    - paragraph [ref=e117]: 03/11/2025
+              - link:
+                - /url: /insights/introducing-aim-remote-agent
+              - listitem [ref=e119]:
+                - link:
+                  - /url: /insights/introducing-aim-remote-agent
+                - link "Publicly-Accessible Disk Images & Mobile Extractions Grid for DFIR 09/25/2024" [ref=e120] [cursor=pointer]:
+                  - /url: /insights/publicly-accessible-disk-images-grid-for-dfir
+                  - generic [ref=e121]:
+                    - text: Publicly-Accessible Disk Images & Mobile Extractions Grid for DFIR
+                    - paragraph [ref=e122]: 09/25/2024
+              - link:
+                - /url: /insights/publicly-accessible-disk-images-grid-for-dfir
+            - link:
+              - /url: /insights/publicly-accessible-disk-images-grid-for-dfir
+          - link:
+            - /url: /insights/publicly-accessible-disk-images-grid-for-dfir
+          - generic [ref=e124]:
+            - link "Browse Categories" [ref=e125] [cursor=pointer]:
+              - /url: /insights/publicly-accessible-disk-images-grid-for-dfir
+              - generic [ref=e126]: Browse Categories
+            - list [ref=e127]:
+              - link:
+                - /url: /insights/publicly-accessible-disk-images-grid-for-dfir
+              - listitem [ref=e128]:
+                - link:
+                  - /url: /insights/publicly-accessible-disk-images-grid-for-dfir
+                - link "Arsenal Image Mounter" [ref=e129] [cursor=pointer]:
+                  - /url: /insights/categories/arsenal-image-mounter
+              - listitem [ref=e130]:
+                - link "Arsenal Recon" [ref=e131] [cursor=pointer]:
+                  - /url: /insights/categories/arsenal-recon
+              - listitem [ref=e132]:
+                - link "BitLocker" [ref=e133] [cursor=pointer]:
+                  - /url: /insights/categories/bitlocker
+              - listitem [ref=e134]:
+                - link "Case Study" [ref=e135] [cursor=pointer]:
+                  - /url: /insights/categories/case-study
+              - listitem [ref=e136]:
+                - link "Gmail URL Decoder" [ref=e137] [cursor=pointer]:
+                  - /url: /insights/categories/gmail-url-decoder
+              - listitem [ref=e138]:
+                - link "HBIN Recon" [ref=e139] [cursor=pointer]:
+                  - /url: /insights/categories/hbin-recon
+              - listitem [ref=e140]:
+                - link "Hibernation Recon" [ref=e141] [cursor=pointer]:
+                  - /url: /insights/categories/hibernation-recon
+              - listitem [ref=e142]:
+                - link "Hive Recon" [ref=e143] [cursor=pointer]:
+                  - /url: /insights/categories/hive-recon
+              - listitem [ref=e144]:
+                - link "New Release" [ref=e145] [cursor=pointer]:
+                  - /url: /insights/categories/new-release
+              - listitem [ref=e146]:
+                - link "News" [ref=e147] [cursor=pointer]:
+                  - /url: /insights/categories/news
+              - listitem [ref=e148]:
+                - link "ODC Recon" [ref=e149] [cursor=pointer]:
+                  - /url: /insights/categories/odc-recon
+              - listitem [ref=e150]:
+                - link "Registry Recon" [ref=e151] [cursor=pointer]:
+                  - /url: /insights/categories/registry-recon
+              - listitem [ref=e152]:
+                - link "Training" [ref=e153] [cursor=pointer]:
+                  - /url: /insights/categories/training
+          - link "NEWSLETTER SIGN UP" [ref=e155] [cursor=pointer]:
+            - /url: "#subscribe_link"
+            - generic [ref=e156]: NEWSLETTER
+            - generic [ref=e157]: SIGN UP
+      - generic [ref=e161]:
+        - heading "Join the List" [level=3] [ref=e162]
+        - paragraph [ref=e163]: Arm yourself with updates about Arsenal tools, training, and research. Our mailing list is double opt-in so you will need to check your email and confirm your subscription before receiving our mailings.
+        - generic [ref=e164]:
+          - generic [ref=e165]:
+            - textbox "First Name" [ref=e168]
+            - textbox "Last Name" [ref=e171]
+            - textbox "Email" [ref=e174]
+            - textbox "Title" [ref=e177]
+            - textbox "Organization" [ref=e180]
+          - button "Subscribe" [ref=e181] [cursor=pointer]
+    - contentinfo [ref=e182]:
+      - generic [ref=e183]:
+        - generic [ref=e186]:
+          - link [ref=e187] [cursor=pointer]:
+            - /url: /
+          - list [ref=e188]:
+            - listitem [ref=e189]:
+              - link " Wakefield, Massachusetts" [ref=e190] [cursor=pointer]:
+                - /url: mailto:https://www.google.com/maps/place/Wakefield,+MA+01880
+                - generic [ref=e192]: 
+                - strong [ref=e194]: Wakefield, Massachusetts
+            - listitem [ref=e195]:
+              - link " sales@ArsenalRecon.com" [ref=e196] [cursor=pointer]:
+                - /url: mailto:sales@ArsenalRecon.com
+                - generic [ref=e198]: 
+                - strong [ref=e200]: sales@ArsenalRecon.com
+            - listitem [ref=e201]:
+              - link " (617) ARSENAL or (617) 277-3625" [ref=e202] [cursor=pointer]:
+                - /url: tel:6172773625
+                - generic [ref=e204]: 
+                - generic [ref=e205]:
+                  - strong [ref=e206]: (617) ARSENAL
+                  - text: or (617) 277-3625
+        - generic [ref=e209]:
+          - generic [ref=e210]:
+            - link "Home" [ref=e211] [cursor=pointer]:
+              - /url: /
+            - link "Products" [ref=e212] [cursor=pointer]:
+              - /url: products
+            - link "Pricing" [ref=e213] [cursor=pointer]:
+              - /url: /pricing
+            - link "Downloads" [ref=e214] [cursor=pointer]:
+              - /url: /downloads
+          - generic [ref=e215]:
+            - link "Our Team" [ref=e216] [cursor=pointer]:
+              - /url: /our-team
+            - link "Testimonials" [ref=e217] [cursor=pointer]:
+              - /url: /testimonials
+            - link "Workstations" [ref=e218] [cursor=pointer]:
+              - /url: /workstations
+          - generic [ref=e219]:
+            - link "FAQs" [ref=e220] [cursor=pointer]:
+              - /url: /faqs
+            - link "Training" [ref=e221] [cursor=pointer]:
+              - /url: /training
+            - link "Insights" [ref=e222] [cursor=pointer]:
+              - /url: /insights
+          - generic [ref=e223]:
+            - link "Privacy Policy" [ref=e224] [cursor=pointer]:
+              - /url: /privacy-policy
+            - link "Cookie Policy" [ref=e225] [cursor=pointer]:
+              - /url: /cookie-policy
+            - link "Terms & Conditions" [ref=e226] [cursor=pointer]:
+              - /url: /terms-and-conditions
+        - list [ref=e229]:
+          - listitem [ref=e230]:
+            - link "Arsenal Recon Twitter" [ref=e231] [cursor=pointer]:
+              - /url: https://twitter.com/ArsenalRecon
+              - generic [ref=e232]:
+                - generic [ref=e233]: 
+                - generic [ref=e234]: 
+          - listitem [ref=e235]:
+            - link "Arsenal Recon Facebook" [ref=e236] [cursor=pointer]:
+              - /url: https://www.facebook.com/ArsenalRecon/
+              - generic [ref=e237]:
+                - generic [ref=e238]: 
+                - generic [ref=e239]: 
+          - listitem [ref=e240]:
+            - link "Arsenal Recon Linkedin" [ref=e241] [cursor=pointer]:
+              - /url: https://www.linkedin.com/company/arsenal-recon/
+              - generic [ref=e242]:
+                - generic [ref=e243]: 
+                - generic [ref=e244]: 

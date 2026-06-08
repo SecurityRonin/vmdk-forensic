@@ -1,9 +1,9 @@
 # vmdk
 
-[![Crates.io](https://img.shields.io/crates/v/vmdk.svg)](https://crates.io/crates/vmdk)
-[![docs.rs](https://img.shields.io/docsrs/vmdk)](https://docs.rs/vmdk)
+[![Crates.io](https://img.shields.io/crates/v/vmdk-core.svg)](https://crates.io/crates/vmdk)
+[![docs.rs](https://img.shields.io/docsrs/vmdk-core)](https://docs.rs/vmdk-core)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/SecurityRonin/vmdk/actions/workflows/ci.yml/badge.svg)](https://github.com/SecurityRonin/vmdk/actions)
+[![CI](https://github.com/SecurityRonin/vmdk-core/actions/workflows/ci.yml/badge.svg)](https://github.com/SecurityRonin/vmdk-core/actions)
 [![Sponsor](https://img.shields.io/badge/sponsor-h4x0r-ea4aaa?logo=github-sponsors)](https://github.com/sponsors/h4x0r)
 
 Pure-Rust, read-only reader for VMware VMDK disk images. Presents the virtual disk as a plain `Read + Seek` byte stream — and, uniquely, **recovers data from a damaged disk through the redundant grain directory that `qemu-img` and `libvmdk` throw away**, while surfacing the forensic metadata they discard.
@@ -268,7 +268,7 @@ Audit a VMDK for tampering, corruption, and recoverability with its forensic sib
 
 | Crate | Role |
 |---|---|
-| [`vmdk-forensic`](https://github.com/SecurityRonin/vmdk) | VMDK integrity analysis — RGD adjudication, dangling-pointer scan, recovery triage, header provenance, graded anomalies |
+| [`vmdk-forensic`](https://github.com/SecurityRonin/vmdk-core) | VMDK integrity analysis — RGD adjudication, dangling-pointer scan, recovery triage, header provenance, graded anomalies |
 
 Once you have the bytes, these parsers analyse the partition layout inside:
 
@@ -283,4 +283,4 @@ in [`forensicnomicon`](https://github.com/SecurityRonin/forensicnomicon).
 
 ---
 
-[Privacy Policy](https://securityronin.github.io/vmdk/privacy/) · [Terms of Service](https://securityronin.github.io/vmdk/terms/) · © 2026 Security Ronin Ltd
+[Privacy Policy](https://securityronin.github.io/vmdk-core/privacy/) · [Terms of Service](https://securityronin.github.io/vmdk-core/terms/) · © 2026 Security Ronin Ltd

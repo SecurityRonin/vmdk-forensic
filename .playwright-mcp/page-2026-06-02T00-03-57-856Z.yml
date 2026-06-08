@@ -1,0 +1,110 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - paragraph [ref=e5]:
+      - text: CFReDS
+      - button "Search using Graphical Filtering 󰓹" [ref=e6] [cursor=pointer]:
+        - generic [ref=e7]: Search using Graphical Filtering
+        - generic [ref=e9]: 󰓹
+    - generic [ref=e12]:
+      - textbox "Initializing Search Data..." [disabled] [ref=e15]
+      - paragraph [ref=e16]:
+        - button "󰍉" [ref=e17] [cursor=pointer]:
+          - generic [ref=e19]: 󰍉
+  - generic [ref=e20]:
+    - generic [ref=e22]:
+      - list [ref=e27]:
+        - listitem [ref=e28]:
+          - link "󰋜" [ref=e29] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e31]: 󰋜
+        - listitem [ref=e32]:
+          - link "󰥨" [ref=e33] [cursor=pointer]:
+            - /url: /all
+            - generic [ref=e35]: 󰥨
+        - listitem [ref=e36]:
+          - link "󰉗" [ref=e37] [cursor=pointer]:
+            - /url: /add
+            - generic [ref=e39]: 󰉗
+        - listitem [ref=e40]:
+          - link "󰣞" [ref=e41] [cursor=pointer]:
+            - /url: /request
+            - generic [ref=e43]: 󰣞
+      - button "󰏌" [ref=e45] [cursor=pointer]:
+        - generic [ref=e48]: 󰏌
+      - button "󰴛" [ref=e50] [cursor=pointer]:
+        - generic [ref=e53]: 󰴛
+      - button "󰇮" [ref=e55] [cursor=pointer]:
+        - generic [ref=e58]: 󰇮
+      - button "󰆈" [ref=e60] [cursor=pointer]:
+        - generic [ref=e63]: 󰆈
+    - article [ref=e69]:
+      - article [ref=e73]:
+        - article [ref=e76]:
+          - generic [ref=e77]:
+            - paragraph [ref=e78]: Loading data...
+            - paragraph [ref=e80]
+  - generic [ref=e95]:
+    - generic [ref=e96]:
+      - img [ref=e97]
+      - strong [ref=e98]: HEADQUARTERS
+      - text: 100 Bureau Drive
+      - text: Gaithersburg, MD 20899
+      - text: 301-975-2000
+    - generic [ref=e99]:
+      - list [ref=e100]:
+        - listitem [ref=e101]:
+          - link "󰕄" [ref=e102] [cursor=pointer]:
+            - /url: https://twitter.com/NIST
+            - generic [ref=e104]: 󰕄
+        - listitem [ref=e105]:
+          - link "󰈌" [ref=e106] [cursor=pointer]:
+            - /url: https://www.facebook.com/NIST
+            - generic [ref=e108]: 󰈌
+        - listitem [ref=e109]:
+          - link "󰌻" [ref=e110] [cursor=pointer]:
+            - /url: https://www.linkedin.com/company/nist
+            - generic [ref=e112]: 󰌻
+        - listitem [ref=e113]:
+          - link "󰋾" [ref=e114] [cursor=pointer]:
+            - /url: https://www.instagram.com/nist
+            - generic [ref=e116]: 󰋾
+        - listitem [ref=e117]:
+          - link "󰗃" [ref=e118] [cursor=pointer]:
+            - /url: https://www.youtube.com/NIST
+            - generic [ref=e120]: 󰗃
+        - listitem [ref=e121]:
+          - link "󰑫" [ref=e122] [cursor=pointer]:
+            - /url: https://www.nist.gov/news-events/nist-rss-feeds
+            - generic [ref=e124]: 󰑫
+      - link "Privacy Statement" [ref=e125] [cursor=pointer]:
+        - /url: https://www.nist.gov/privacy-policy
+      - link "Privacy Policy" [ref=e126] [cursor=pointer]:
+        - /url: https://www.nist.gov/privacy-policy#privpolicy
+      - link "Security Notice" [ref=e127] [cursor=pointer]:
+        - /url: https://www.nist.gov/privacy-policy#secnot
+      - link "Accessibility Statement" [ref=e128] [cursor=pointer]:
+        - /url: https://www.nist.gov/privacy-policy#accesstate
+      - link "NIST Privacy Program" [ref=e129] [cursor=pointer]:
+        - /url: https://www.nist.gov/privacy
+      - link "No Fear Act Policy" [ref=e130] [cursor=pointer]:
+        - /url: https://www.nist.gov/no-fear-act-policy
+      - link "Disclaimer" [ref=e131] [cursor=pointer]:
+        - /url: https://www.nist.gov/disclaimer
+      - link "FOIA" [ref=e132] [cursor=pointer]:
+        - /url: https://www.nist.gov/office-director/freedom-information-act
+      - link "Environmental Policy Statement" [ref=e133] [cursor=pointer]:
+        - /url: https://www.nist.gov/environmental-policy-statement
+      - link "Cookie Disclaimer" [ref=e134] [cursor=pointer]:
+        - /url: https://www.nist.gov/privacy-policy#cookie
+      - link "Scientific Integrity Summary" [ref=e135] [cursor=pointer]:
+        - /url: https://www.nist.gov/summary-report-scientific-integrity
+      - link "NIST Information Quality Standards" [ref=e136] [cursor=pointer]:
+        - /url: https://www.nist.gov/nist-information-quality-standards
+      - link "Commerce.gov" [ref=e137] [cursor=pointer]:
+        - /url: https://www.commerce.gov/
+      - link "Healthcare.gov" [ref=e138] [cursor=pointer]:
+        - /url: https://www.healthcare.gov/
+      - link "Science.gov" [ref=e139] [cursor=pointer]:
+        - /url: http://www.science.gov/
+      - link "USA.gov" [ref=e140] [cursor=pointer]:
+        - /url: http://www.usa.gov/
