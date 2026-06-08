@@ -7,7 +7,7 @@
 //! provenance findings that `qemu-img` and `libvmdk` discard.
 //!
 //! `analyse()` returns canonical [`forensicnomicon::report::Finding`]s, so VMDK
-//! findings aggregate alongside every other SecurityRonin analyzer.
+//! findings aggregate alongside every other `SecurityRonin` analyzer.
 //!
 //! ```no_run
 //! use vmdk_forensic::VmdkIntegrity;
@@ -221,14 +221,20 @@ impl forensicnomicon::report::Observation for AnomalyKind {
     }
 
     fn evidence(&self) -> Vec<forensicnomicon::report::Evidence> {
-        use AnomalyKind::{DanglingGrain, DanglingGrainTable, PrimaryGdRecoverableViaRgd, PrimaryGdUnrecoverable};
+        use AnomalyKind::{
+            DanglingGrain, DanglingGrainTable, PrimaryGdRecoverableViaRgd, PrimaryGdUnrecoverable,
+        };
         let ev = |field: &str, value: String| forensicnomicon::report::Evidence {
             field: field.to_string(),
             value,
             location: None,
         };
         match self {
-            PrimaryGdRecoverableViaRgd { damaged, total, recoverable } => vec![
+            PrimaryGdRecoverableViaRgd {
+                damaged,
+                total,
+                recoverable,
+            } => vec![
                 ev("damaged", damaged.to_string()),
                 ev("total", total.to_string()),
                 ev("recoverable", recoverable.to_string()),
@@ -837,7 +843,9 @@ mod tests {
             .map(|x| x.code)
             .collect();
         assert!(k.iter().any(|c| c.as_ref() == "VMDK-DANGLING-GT"));
-        assert!(k.iter().any(|c| c.as_ref() == "VMDK-PRIMARY-GD-RECOVERABLE"));
+        assert!(k
+            .iter()
+            .any(|c| c.as_ref() == "VMDK-PRIMARY-GD-RECOVERABLE"));
         // first finding is the most severe (Error sorts before Warning)
     }
 
@@ -853,7 +861,9 @@ mod tests {
             .into_iter()
             .map(|x| x.code)
             .collect();
-        assert!(k.iter().any(|c| c.as_ref() == "VMDK-PRIMARY-GD-UNRECOVERABLE"));
+        assert!(k
+            .iter()
+            .any(|c| c.as_ref() == "VMDK-PRIMARY-GD-UNRECOVERABLE"));
     }
 
     #[test]

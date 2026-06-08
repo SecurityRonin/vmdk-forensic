@@ -1157,7 +1157,15 @@ mod tests {
         assert!(is_success(cmd_map(&p, false)));
         assert!(is_success(cmd_hash(&p, false)));
         assert!(is_success(cmd_verify(&p, false)));
-        assert!(is_success(cmd_dump(&p, None, 0, Some(64), false, false, false))); // stdout range
+        assert!(is_success(cmd_dump(
+            &p,
+            None,
+            0,
+            Some(64),
+            false,
+            false,
+            false
+        ))); // stdout range
         assert!(is_success(cmd_dump(
             &p,
             None,
@@ -1216,7 +1224,11 @@ mod tests {
             true
         )));
         let meta = std::fs::metadata(&out).unwrap();
-        assert_eq!(meta.len(), 1_048_576, "output is the full virtual-disk size");
+        assert_eq!(
+            meta.len(),
+            1_048_576,
+            "output is the full virtual-disk size"
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::MetadataExt;
@@ -1367,7 +1379,15 @@ mod tests {
         let p = dir.path().join("corrupt.vmdk");
         std::fs::write(&p, &vmdk).unwrap();
         // hex + recover → recovers a grain → prints the recovery note (covers that branch)
-        assert!(is_success(cmd_dump(&p, None, 0, Some(512), true, true, false)));
+        assert!(is_success(cmd_dump(
+            &p,
+            None,
+            0,
+            Some(512),
+            true,
+            true,
+            false
+        )));
     }
 
     #[test]
@@ -1482,7 +1502,8 @@ mod tests {
 
     #[test]
     fn examine_clean_image_shows_identity_and_passes() {
-        let r = examine_report(&data("dfvfs_ext2.vmdk"), ExamineOpts::default()).expect("examine a clean image");
+        let r = examine_report(&data("dfvfs_ext2.vmdk"), ExamineOpts::default())
+            .expect("examine a clean image");
         assert!(!r.failed, "a clean image is not a failure: {}", r.text);
         assert!(
             r.text.contains("VMDK"),
@@ -1504,7 +1525,11 @@ mod tests {
         let p = dir.path().join("dangling.vmdk");
         std::fs::write(&p, opens_but_gt_and_rgd_dangle()).unwrap();
         let r = examine_report(&p, ExamineOpts::default()).expect("examine opens the image");
-        assert!(r.failed, "a High-severity anomaly fails the verdict: {}", r.text);
+        assert!(
+            r.failed,
+            "a High-severity anomaly fails the verdict: {}",
+            r.text
+        );
         assert!(
             r.text.contains("VMDK-DANGLING") || r.text.to_uppercase().contains("DANGLING"),
             "the finding code is surfaced to the examiner: {}",
@@ -1524,10 +1549,13 @@ mod tests {
             },
         )
         .expect("examine --json");
-        let v: serde_json::Value =
-            serde_json::from_str(&r.text).expect("output is valid JSON");
+        let v: serde_json::Value = serde_json::from_str(&r.text).expect("output is valid JSON");
         assert!(v.get("format").is_some(), "has format: {}", r.text);
-        assert!(v.get("findings").is_some(), "has findings array: {}", r.text);
+        assert!(
+            v.get("findings").is_some(),
+            "has findings array: {}",
+            r.text
+        );
         assert!(v.get("failed").is_some(), "has verdict: {}", r.text);
     }
 
@@ -1544,9 +1572,7 @@ mod tests {
         .expect("examine --json --fp");
         let v: serde_json::Value = serde_json::from_str(&r.text).expect("valid JSON");
         assert!(
-            v.get("fingerprint")
-                .and_then(|f| f.get("sha256"))
-                .is_some(),
+            v.get("fingerprint").and_then(|f| f.get("sha256")).is_some(),
             "fingerprint.sha256 present: {}",
             r.text
         );
@@ -1644,7 +1670,8 @@ mod tests {
     fn examine_lists_companion_files() {
         // flat.vmdk references flat-f001.vmdk — an acquisition handler must see
         // exactly which companion files to collect.
-        let r = examine_report(&data("flat.vmdk"), ExamineOpts::default()).expect("examine multi-file");
+        let r =
+            examine_report(&data("flat.vmdk"), ExamineOpts::default()).expect("examine multi-file");
         assert!(
             r.text.to_lowercase().contains("companion"),
             "lists companion files: {}",

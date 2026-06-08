@@ -288,7 +288,10 @@ mod tests {
         let mut chain = VmdkChainReader::open(&p).unwrap();
         let mut buf = vec![0u8; 2 * g];
         chain.read_exact(&mut buf).unwrap();
-        assert!(buf[..g].iter().all(|&b| b == 0), "grain 0 is sparse -> zeros");
+        assert!(
+            buf[..g].iter().all(|&b| b == 0),
+            "grain 0 is sparse -> zeros"
+        );
         assert!(
             buf[g..].iter().all(|&b| b == 0xBB),
             "grain 1 (allocated) must not be zero-masked by the sparse grain 0"

@@ -13,12 +13,17 @@ use crate::error::{Result, VmdkError};
 pub(crate) fn resolve_extent_path(base_dir: &Path, filename: &str) -> io::Result<PathBuf> {
     let rel = Path::new(filename);
     let escapes = rel.components().any(|c| {
-        matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_))
+        matches!(
+            c,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
     });
     if escapes {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            format!("refusing descriptor-controlled path that escapes the image directory: {filename}"),
+            format!(
+                "refusing descriptor-controlled path that escapes the image directory: {filename}"
+            ),
         ));
     }
     Ok(base_dir.join(rel))
@@ -323,8 +328,14 @@ mod tests {
         let bytes = b"createType=\"monolithicFlat\"\nddb.encoding = \"windows-1252\"\nparentFileNameHint=\"caf\xE9\x80.vmdk\"\n";
         let s = decode_descriptor(bytes);
         assert!(s.contains('\u{00E9}'), "0xE9 -> é: {s:?}");
-        assert!(s.contains('\u{20AC}'), "0x80 -> € (cp1252, not Latin-1): {s:?}");
-        assert!(s.contains("monolithicFlat"), "ASCII structure preserved: {s:?}");
+        assert!(
+            s.contains('\u{20AC}'),
+            "0x80 -> € (cp1252, not Latin-1): {s:?}"
+        );
+        assert!(
+            s.contains("monolithicFlat"),
+            "ASCII structure preserved: {s:?}"
+        );
     }
 
     #[test]
@@ -334,7 +345,10 @@ mod tests {
         let bytes = b"createType=\"monolithicSparse\"\nname=\xE9 raw\n";
         let s = decode_descriptor(bytes);
         assert!(!s.is_empty(), "must never silently empty the descriptor");
-        assert!(s.contains("monolithicSparse"), "ASCII structure kept: {s:?}");
+        assert!(
+            s.contains("monolithicSparse"),
+            "ASCII structure kept: {s:?}"
+        );
         assert!(s.contains('\u{FFFD}'), "undecodable byte -> U+FFFD: {s:?}");
     }
 

@@ -443,9 +443,9 @@ pub fn compressed_vmdk_with_oversized_marker(marker_data_size: u32) -> Vec<u8> {
 pub fn compressed_vmdk_with_bomb_grain(decompressed_len: usize) -> Vec<u8> {
     use std::io::Write as _;
     let payload = {
-        let mut enc =
-            flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
-        enc.write_all(&vec![0u8; decompressed_len]).expect("compress");
+        let mut enc = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        enc.write_all(&vec![0u8; decompressed_len])
+            .expect("compress");
         enc.finish().expect("finish")
     };
 
