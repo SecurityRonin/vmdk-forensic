@@ -1,13 +1,13 @@
 [package]
 name         = "vmdk-forensic"
-version      = "0.6.0"
+version      = "0.6.1"
 edition      = "2021"
 rust-version = "1.85"
 description  = "Forensic integrity analysis for VMware VMDK images — redundant-grain-directory adjudication, dangling-pointer scan, recovery triage, and header provenance"
 license      = "MIT"
 authors      = ["Albert Hui"]
-repository   = "https://github.com/SecurityRonin/vmdk"
-homepage     = "https://github.com/SecurityRonin/vmdk"
+repository   = "https://github.com/SecurityRonin/vmdk-core"
+homepage     = "https://github.com/SecurityRonin/vmdk-core"
 documentation = "https://docs.rs/vmdk-forensic"
 readme       = "README.md"
 keywords     = ["forensics", "vmdk", "integrity", "anti-forensics", "vmware"]
@@ -17,12 +17,12 @@ categories   = ["parser-implementations", "filesystem"]
 serde = ["dep:serde", "vmdk/serde", "forensicnomicon/serde"]
 
 [dependencies]
-vmdk  = { version = "0.6.3", path = "../vmdk", package = "vmdk-core" }
-forensicnomicon = { version = "0.3.0", path = "../../forensicnomicon" }
+vmdk  = { version = "0.6.3", package = "vmdk-core" }
+forensicnomicon = "0.3.1"
 serde = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
-vmdk = { version = "0.6.3", path = "../vmdk", package = "vmdk-core", features = ["test-helpers"] }
+vmdk = { version = "0.6.3", package = "vmdk-core", features = ["test-helpers"] }
 
 [lints]
 workspace = true
