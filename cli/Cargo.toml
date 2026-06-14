@@ -1,11 +1,11 @@
 [package]
 name         = "vmdk-cli"
-version      = "0.7.0"
-edition      = "2021"
-rust-version = "1.85"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 description  = "CLI tool for inspecting VMDK disk images"
-license      = "MIT"
-repository   = "https://github.com/SecurityRonin/vmdk-forensic"
+license.workspace = true
+repository.workspace = true
 keywords     = ["forensics", "vmdk", "disk-image", "vmware"]
 categories   = ["command-line-utilities", "filesystem"]
 readme       = "../README.md"
@@ -15,20 +15,20 @@ name = "vmdk"
 path = "src/main.rs"
 
 [dependencies]
-vmdk = { version = "0.7.0", path = "../core", package = "vmdk-core" }
+vmdk = { workspace = true }
 vmdk-forensic = { version = "0.7.0", path = "../forensic" }
 # Canonical reporting vocabulary (Severity/Finding/Category) — every fleet crate
 # that touches reporting depends on forensicnomicon directly, the single source of truth.
 # serde feature: Finding serializes into the `--json` output.
-forensicnomicon = { version = "0.5", features = ["serde"] }
-clap = { version = "4", features = ["derive"] }
-serde_json = "1"
+forensicnomicon = { workspace = true, features = ["serde"] }
+clap = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }
 # test-helpers exposes vmdk::testutil so e2e tests can synthesise fixtures
 # (deltas, matching-RGD images, differing-content pairs) for full CLI coverage.
-vmdk = { version = "0.7.0", path = "../core", package = "vmdk-core", features = ["test-helpers"] }
+vmdk = { workspace = true, features = ["test-helpers"] }
 
 [lints]
 workspace = true
