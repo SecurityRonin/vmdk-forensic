@@ -1,21 +1,28 @@
 # Terms of Service
 
-**vmdk** is free, open-source software licensed under the [MIT License](../LICENSE).
-These terms supplement, but do not override, that licence.
+*Last updated: 2026-06-15*
 
-- **As-is, no warranty.** The software is provided "as is", without warranty of
-  any kind, express or implied. The authors are not liable for any claim,
-  damages, or other liability arising from its use.
-- **No guarantee of correctness.** Forensic analysis is a tool to assist a
-  qualified examiner, not a substitute for one. Output may contain errors or
-  omissions; you must independently verify any finding before relying on it in
-  an investigation, report, or legal proceeding.
-- **Lawful use only.** You are responsible for ensuring you have the authority
-  to examine any disk image you process with this software, and for complying
-  with all applicable laws and regulations.
-- **No professional relationship.** Use of this software does not create any
-  professional, advisory, or expert-witness relationship with the authors.
+## Licence
 
-By using the software you accept these terms and the terms of the MIT License.
+vmdk-forensic is released under the [MIT License](https://github.com/SecurityRonin/vmdk-forensic/blob/main/LICENSE). You may use, modify, and distribute it subject to the terms of that licence.
 
-© 2026 Security Ronin Ltd
+## Acceptable Use
+
+You agree to use vmdk-forensic only for lawful purposes, including but not limited to:
+
+- Digital forensics investigations on systems you own or are authorised to examine
+- Incident response activities within your organisation
+- Security research and CTF competitions
+- Academic or educational use
+
+## No Warranty
+
+vmdk-forensic is provided "as is" without warranty of any kind. Security Ronin Ltd is not liable for any damages arising from use of this software.
+
+## Contact
+
+[security@securityronin.com](mailto:security@securityronin.com)
+
+---
+
+[Privacy Policy](privacy.md) · [Home](index.md) · © 2026 Security Ronin Ltd.

@@ -1,21 +1,27 @@
 # Privacy Policy
 
-**vmdk** is an open-source Rust library and command-line tool that runs entirely
-on your own machine.
+*Last updated: 2026-06-15*
 
-- **No data collection.** The software does not transmit, upload, or share any
-  data. Disk images and their contents never leave your computer.
-- **No telemetry.** There is no analytics, crash reporting, phone-home, or
-  network activity of any kind in the library or CLI.
-- **No accounts.** The software requires no registration, login, or API key.
+## Summary
 
-Any images you read are processed locally and the results are written only to the
-output you direct (stdout, a file you name, or your own integration). You are
-solely responsible for handling the evidence and reports you generate in
-accordance with your jurisdiction's laws and your engagement's chain-of-custody
-requirements.
+vmdk-forensic is a local Rust library. It does not collect, transmit, or store any personal data on remote servers.
 
-This policy applies to the software as distributed via crates.io and GitHub. It
-does not cover forks or modified copies.
+## Data Access
 
-© 2026 Security Ronin Ltd
+vmdk-forensic reads only the file bytes you pass to it. All processing happens in memory on your local machine. Nothing is uploaded anywhere.
+
+## Telemetry
+
+vmdk-forensic has **no telemetry**. It makes no network requests of any kind.
+
+## Open Source
+
+vmdk-forensic is open source (MIT). You can audit every line of code at [github.com/SecurityRonin/vmdk-forensic](https://github.com/SecurityRonin/vmdk-forensic).
+
+## Contact
+
+Privacy questions: [security@securityronin.com](mailto:security@securityronin.com)
+
+---
+
+[Terms of Service](terms.md) · [Home](index.md) · © 2026 Security Ronin Ltd.
