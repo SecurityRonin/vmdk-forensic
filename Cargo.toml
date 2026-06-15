@@ -8,7 +8,7 @@ members = ["core", "forensic", "cli"]
 version = "0.7.0"
 edition = "2021"
 rust-version = "1.85"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/SecurityRonin/vmdk-forensic"
 
 # Single source of truth for dependency versions (DRY): declare each once;

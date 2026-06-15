@@ -3,7 +3,7 @@
 [![vmdk-core](https://img.shields.io/crates/v/vmdk-core.svg?label=vmdk-core)](https://crates.io/crates/vmdk-core)
 [![vmdk-forensic](https://img.shields.io/crates/v/vmdk-forensic.svg?label=vmdk-forensic)](https://crates.io/crates/vmdk-forensic)
 [![docs.rs](https://img.shields.io/docsrs/vmdk-core)](https://docs.rs/vmdk-core)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/SecurityRonin/vmdk-forensic/actions/workflows/ci.yml/badge.svg)](https://github.com/SecurityRonin/vmdk-forensic/actions)
 [![Sponsor](https://img.shields.io/badge/sponsor-h4x0r-ea4aaa?logo=github-sponsors)](https://github.com/sponsors/h4x0r)
 
