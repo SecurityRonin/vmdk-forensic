@@ -5,7 +5,7 @@
 
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
-const DATA_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data");
+const DATA_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/data");
 
 fn read_fixture(name: &str) -> Vec<u8> {
     let path = format!("{DATA_DIR}/{name}");

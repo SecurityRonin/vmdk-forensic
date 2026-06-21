@@ -12,6 +12,7 @@ documentation = "https://docs.rs/vmdk-forensic"
 readme       = "README.md"
 keywords     = ["forensics", "vmdk", "integrity", "anti-forensics", "vmware"]
 categories   = ["parser-implementations", "filesystem"]
+exclude      = ["tests/", "fuzz/"]
 
 [features]
 serde = ["dep:serde", "vmdk/serde", "forensicnomicon/serde"]

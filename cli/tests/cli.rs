@@ -9,7 +9,7 @@ fn data_path(name: &str) -> String {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("workspace root")
-        .join("core/tests/data")
+        .join("tests/data")
         .join(name)
         .to_string_lossy()
         .into_owned()

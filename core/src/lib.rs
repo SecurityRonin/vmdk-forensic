@@ -1899,7 +1899,7 @@ mod tests {
             return;
         };
         let corpus =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/dfvfs_ext2.vmdk");
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/data/dfvfs_ext2.vmdk");
         if !corpus.exists() {
             return;
         }
@@ -1949,7 +1949,7 @@ mod tests {
             return;
         };
         let corpus =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/minimal.vmdk");
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/data/minimal.vmdk");
         if !corpus.exists() {
             return;
         }

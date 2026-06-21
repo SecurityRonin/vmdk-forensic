@@ -12,7 +12,7 @@ repository.workspace = true
 homepage     = "https://github.com/SecurityRonin/vmdk-forensic"
 documentation = "https://docs.rs/vmdk-core"
 readme       = "../README.md"
-exclude      = ["tests/data/", "fuzz/"]
+exclude      = ["tests/", "fuzz/"]
 
 [features]
 test-helpers = []

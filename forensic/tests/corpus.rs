@@ -6,7 +6,7 @@ use vmdk_forensic::VmdkIntegrity;
 
 fn fixture(name: &str) -> Vec<u8> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../core/tests/data")
+        .join("../tests/data")
         .join(name);
     std::fs::read(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
