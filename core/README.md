@@ -131,9 +131,13 @@ println!("content ID: {}",  disk.effective_content_id());     // resolves longCo
 - **Zero `unsafe`** — `unsafe_code = "forbid"` workspace-wide; no C dependency.
 - **Fuzz-tested** — `cargo fuzz` targets cover the open path, the read surface,
   and the RGD recovery paths; run in CI on every change.
-- **Validated against real artifacts** — COWD and seSparse output is
-  cross-validated **byte-for-byte against `qemu-img convert -O raw`**, so the
-  synthetic fixtures and the reader cannot share a blind spot.
+- **Validated against real artifacts** — a real VMware-written `monolithicSparse`
+  image (`dfvfs_ext2.vmdk`, from log2timeline/dfvfs, Apache-2.0) is read
+  **byte-for-byte against `qemu-img convert -O raw`**, and COWD / seSparse output
+  is cross-validated against `qemu-img`'s independent reader, so the synthetic
+  fixtures and the reader cannot share a blind spot. Oracles, corpora, and
+  evidence tiers are documented at
+  [securityronin.github.io/vmdk-forensic/validation](https://securityronin.github.io/vmdk-forensic/validation/).
 
 ## Reader vs. analyzer
 

@@ -91,8 +91,12 @@ header field uses saturating arithmetic and is bounds-checked before any read or
 allocation; the grain-directory size is capped (16 MiB); zero `unsafe`
 (`unsafe_code = "forbid"` workspace-wide). The analysis pipeline has a dedicated
 `cargo fuzz` target (`fuzz_forensic`), and the underlying `vmdk-core` reader is
-cross-validated **byte-for-byte against `qemu-img convert -O raw`** on real
-COWD/seSparse images — so the analyzer and its fixtures don't share a blind spot.
+cross-validated **byte-for-byte against `qemu-img convert -O raw`** — on a real
+VMware-written image (`dfvfs_ext2.vmdk`, log2timeline/dfvfs) and against
+`qemu-img`'s independent reader for COWD/seSparse — so the analyzer and its
+fixtures don't share a blind spot. Oracles, corpora, and evidence tiers are
+documented at
+[securityronin.github.io/vmdk-forensic/validation](https://securityronin.github.io/vmdk-forensic/validation/).
 
 Findings are **observations, not legal conclusions** — MITRE ATT&CK references
 (e.g. T1565.001 on `VMDK-RGD-MISMATCH`) read "consistent with," and the analyst

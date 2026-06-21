@@ -252,10 +252,14 @@ cargo +nightly fuzz run fuzz_forensic
 ## Testing
 
 280+ tests (unit + integration) covering every public API, every format branch,
-the recovery paths, and adversarial inputs. COWD and seSparse output is
-cross-validated **byte-for-byte against `qemu-img convert -O raw`** — the
-synthetic fixtures and the reader cannot share a blind spot. Coverage is enforced
-in CI.
+the recovery paths, and adversarial inputs. The real VMware-written
+`monolithicSparse` corpus image (`dfvfs_ext2.vmdk`, from
+[log2timeline/dfvfs](https://github.com/log2timeline/dfvfs), Apache-2.0) is read
+**byte-for-byte against `qemu-img convert -O raw`**, and COWD / seSparse output is
+cross-validated against `qemu-img`'s independent reader — the synthetic fixtures
+and the reader cannot share a blind spot. Coverage is enforced in CI. Which oracle
+and corpus back each capability — with evidence tiers — is documented in
+[the validation page](https://securityronin.github.io/vmdk-forensic/validation/).
 
 ```bash
 cargo test
