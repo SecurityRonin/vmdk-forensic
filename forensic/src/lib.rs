@@ -646,7 +646,7 @@ impl<R: Read + Seek> VmdkIntegrity<R> {
         };
         let mut out: Vec<Finding> = kinds.iter().map(|k| k.to_finding(source.clone())).collect();
         // Most-severe first; unrated (None) sorts last.
-        out.sort_by(|a, b| b.severity.cmp(&a.severity));
+        out.sort_by_key(|f| std::cmp::Reverse(f.severity));
         Ok(out)
     }
 }
