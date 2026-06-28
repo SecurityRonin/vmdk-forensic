@@ -16,7 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 vmdk = { workspace = true }
-vmdk-forensic = { version = "0.7.0", path = "../forensic" }
+vmdk-forensic = { version = "0.8.0", path = "../forensic" }
 # Canonical reporting vocabulary (Severity/Finding/Category) — every fleet crate
 # that touches reporting depends on forensicnomicon directly, the single source of truth.
 # serde feature: Finding serializes into the `--json` output.
