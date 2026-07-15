@@ -1013,6 +1013,8 @@ mod testutil;
 
 #[cfg(feature = "vfs")]
 mod vfs;
+#[cfg(feature = "vfs")]
+pub use vfs::VmdkSource;
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

@@ -8,6 +8,67 @@
 //! poison-recovering `Mutex` and serves `read_at` by seeking then reading under
 //! the lock. Reads serialize through the mutex. Behind the `vfs` feature.
 
+use std::io::{Read, Seek, SeekFrom};
+use std::sync::{Mutex, PoisonError};
+
+use forensic_vfs::{ImageSource, VfsError, VfsResult};
+
+use crate::VmdkReader;
+
+/// A decoded [`VmdkReader`] presented as a read-only [`ImageSource`].
+///
+/// Construction records the virtual disk size once; `read_at` locks the reader,
+/// seeks, and fills the buffer. Because a VMDK read advances an internal cursor
+/// (`&mut self`), reads **serialize through the mutex** — correct and
+/// `Send + Sync`, at the cost of no intra-source read parallelism. The lock is
+/// poison-recovering, so one panicking reader does not wedge the source.
+pub struct VmdkSource<R: Read + Seek + Send> {
+    inner: Mutex<VmdkReader<R>>,
+    len: u64,
+}
+
+impl<R: Read + Seek + Send> VmdkSource<R> {
+    /// Wrap an open [`VmdkReader`], recording its virtual disk size as the
+    /// source length.
+    pub fn new(reader: VmdkReader<R>) -> Self {
+        let len = reader.virtual_disk_size();
+        Self {
+            inner: Mutex::new(reader),
+            len,
+        }
+    }
+}
+
+impl<R: Read + Seek + Send + 'static> ImageSource for VmdkSource<R> {
+    fn len(&self) -> u64 {
+        self.len
+    }
+
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
+        let io_err = |op: &'static str| move |source: std::io::Error| VfsError::Io { op, source };
+        let avail = self.len.saturating_sub(offset);
+        if avail == 0 {
+            return Ok(0);
+        }
+        let want = (buf.len() as u64).min(avail) as usize;
+        let mut guard = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        guard
+            .seek(SeekFrom::Start(offset))
+            .map_err(io_err("vmdk::seek"))?;
+        let mut total = 0;
+        while total < want {
+            match guard
+                .read(&mut buf[total..want])
+                .map_err(io_err("vmdk::read"))?
+            {
+                0 => break,
+                n => total += n,
+            }
+        }
+        Ok(total)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
