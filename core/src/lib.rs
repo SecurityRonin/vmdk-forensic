@@ -1009,6 +1009,13 @@ pub mod testutil;
 #[cfg(not(feature = "test-helpers"))]
 mod testutil;
 
+// ── forensic-vfs integration ──────────────────────────────────────────────────
+
+#[cfg(feature = "vfs")]
+mod vfs;
+#[cfg(feature = "vfs")]
+pub use vfs::VmdkSource;
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

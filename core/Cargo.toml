@@ -23,6 +23,9 @@ full-encoding = ["dep:encoding_rs"]
 # Forward internal diagnostics to the `tracing` ecosystem for structured,
 # level-filtered debugging over untrusted images. Off by default — zero logging dep.
 trace = ["dep:tracing"]
+# Implement the forensic-vfs ImageSource contract so a decoded VMDK composes
+# directly into the fleet VFS. Off by default (optional forensic-vfs dep).
+vfs = ["dep:forensic-vfs"]
 
 [[example]]
 name = "emit_fixture"
@@ -39,6 +42,7 @@ flate2    = { workspace = true }
 serde     = { workspace = true, optional = true }
 sha2      = { workspace = true }
 md-5      = { workspace = true }
+forensic-vfs = { version = "0.1", optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
