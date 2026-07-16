@@ -42,7 +42,7 @@ flate2    = { workspace = true }
 serde     = { workspace = true, optional = true }
 sha2      = { workspace = true }
 md-5      = { workspace = true }
-forensic-vfs = { version = "0.1", optional = true }
+forensic-vfs = { version = "0.3", optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
