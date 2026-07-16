@@ -35,5 +35,5 @@ doc   = false
 
 [dependencies]
 libfuzzer-sys = "0.4"
-vmdk          = { path = "../vmdk" }
-vmdk-forensic = { path = "../vmdk-forensic" }
+vmdk          = { path = "../core", package = "vmdk-core" }
+vmdk-forensic = { path = "../forensic" }

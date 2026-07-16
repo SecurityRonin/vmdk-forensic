@@ -81,7 +81,10 @@ jobs:
           toolchain: nightly
           components: rust-src
       - run: cargo install cargo-fuzz
-      - run: cargo fuzz build
+      # `cargo fuzz` needs nightly `-Z` flags; force `+nightly` so the
+      # rust-toolchain.toml pin (stable) can't override it — a `+toolchain` on
+      # the command line beats the toml.
+      - run: cargo +nightly fuzz build
       # Seed each corpus with the committed real-world images, then fuzz briefly. Any
       # crash on crafted/corrupted input fails the build.
       - name: Smoke-fuzz every target (seeded)
@@ -89,7 +92,7 @@ jobs:
           for t in fuzz_open fuzz_read fuzz_recover fuzz_forensic; do
             mkdir -p "fuzz/corpus/$t"
             cp core/tests/data/*.vmdk "fuzz/corpus/$t/" 2>/dev/null || true
-            cargo fuzz run "$t" -- -max_total_time=45 -rss_limit_mb=4096
+            cargo +nightly fuzz run "$t" -- -max_total_time=45 -rss_limit_mb=4096
           done
 
   secrets:
