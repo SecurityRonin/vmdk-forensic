@@ -1,4 +1,12 @@
 target/
 artifacts/
-corpus/
 coverage/
+# Ignore fuzzer-generated corpus entries but keep the committed seed inputs.
+# A blanket `corpus/` ignored the tracked seeds below too, making them
+# "committed AND ignored" — which broke release-plz. Negate exactly the tracked
+# seeds so generated/local corpus files stay ignored (no untracked noise).
+corpus/*/*
+!corpus/fuzz_open/flat.vmdk
+!corpus/fuzz_open/flat-f001.vmdk
+!corpus/fuzz_open/minimal.vmdk
+!corpus/fuzz_open/stream_opt.vmdk
