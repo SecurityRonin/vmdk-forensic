@@ -16,6 +16,14 @@ pub const SECTOR_SIZE: u64 = 512;
 /// at 2 KiB and prevents a crafted header from forcing a huge allocation.
 pub const MAX_NUM_GTES_PER_GT: u32 = 512;
 
+/// Upper bound on `grainSize` (in sectors). Real VMDK grains are powers of two and
+/// tiny — 128 sectors (64 KiB) is the VMware default and ESXi/VMFS tops out around
+/// 2048 sectors (1 MiB). This cap (32 MiB) is orders of magnitude above any genuine
+/// file, yet bounds the compressed-grain read allocation (`vec![0u8; data_size]`,
+/// where `data_size <= grain_size_bytes + 64 KiB`) so a crafted header cannot force
+/// a multi-gigabyte allocation. Mirrors the `MAX_NUM_GTES_PER_GT` allocation cap.
+pub const MAX_GRAIN_SIZE_SECTORS: u64 = 0x10000;
+
 /// Sentinel `gdOffset` in the *primary* header of a `streamOptimized` extent.
 ///
 /// When `gdOffset == GD_AT_END` the real GD location is in the *footer* header
@@ -81,6 +89,15 @@ impl SparseExtentHeader {
                 field: "grain_size",
                 value: grain_size,
                 reason: "must be >= 8 sectors (VDF 1.1 §4.1)",
+            });
+        }
+        // Upper bound: caps the compressed-grain read allocation so a crafted header
+        // cannot drive a multi-gigabyte allocation (fuzz_recover oom-2763835523).
+        if grain_size > MAX_GRAIN_SIZE_SECTORS {
+            return Err(VmdkError::FieldOutOfRange {
+                field: "grain_size",
+                value: grain_size,
+                reason: "exceeds the maximum supported grain size (32 MiB)",
             });
         }
         if num_gtes_per_gt == 0 {
@@ -174,6 +191,22 @@ mod tests {
             Err(VmdkError::FieldOutOfRange {
                 field: "grain_size",
                 value: 4,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn parse_rejects_grain_size_above_maximum() {
+        // A huge grainSize would size the compressed-grain read allocation into the
+        // gigabytes (fuzz_recover oom-2763835523); it must be rejected at parse time.
+        let mut h = valid_header();
+        let oversized = MAX_GRAIN_SIZE_SECTORS + 1;
+        h[20..28].copy_from_slice(&oversized.to_le_bytes());
+        assert!(matches!(
+            SparseExtentHeader::parse(&h),
+            Err(VmdkError::FieldOutOfRange {
+                field: "grain_size",
                 ..
             })
         ));

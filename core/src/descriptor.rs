@@ -182,7 +182,7 @@ fn try_parse_flat_extent(line: &str) -> Option<ExtentEntry> {
     Some(ExtentEntry {
         size_sectors,
         filename: Box::from(filename),
-        file_byte_offset: file_sector_offset * 512,
+        file_byte_offset: file_sector_offset.saturating_mul(512),
         is_zero: false,
     })
 }
@@ -412,6 +412,15 @@ RW 2048 FLAT "flat-f001.vmdk" 0
         let text = "createType=\"twoGbMaxExtentFlat\"\nRW 512 FLAT \"ext.vmdk\" 4096\n";
         let d = parse_text_descriptor(text).expect("parse");
         assert_eq!(d.extents[0].file_byte_offset, 4096 * 512);
+    }
+
+    #[test]
+    fn parse_flat_sector_offset_no_multiply_overflow() {
+        // Attacker-controlled sector offset near u64::MAX must saturate, not panic
+        // under overflow-checks (fuzz_recover crash-c237a5d8: `* 512` overflowed).
+        let text = "createType=\"monolithicFlat\"\nRW 512 FLAT \"ext.vmdk\" 18446744073709551615\n";
+        let d = parse_text_descriptor(text).expect("parse");
+        assert_eq!(d.extents[0].file_byte_offset, u64::MAX);
     }
 
     #[test]
