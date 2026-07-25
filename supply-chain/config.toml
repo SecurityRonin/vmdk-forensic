@@ -17,13 +17,13 @@ url = "https://raw.githubusercontent.com/google/rust-crate-audits/main/audits.to
 url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
 
 [policy.vmdk-cli]
-audit-as-crates-io = true
+audit-as-crates-io = false
 
 [policy.vmdk-core]
-audit-as-crates-io = true
+audit-as-crates-io = false
 
 [policy.vmdk-forensic]
-audit-as-crates-io = true
+audit-as-crates-io = false
 
 [[exemptions.anstream]]
 version = "1.0.0"
@@ -295,18 +295,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.version_check]]
 version = "0.9.5"
-criteria = "safe-to-deploy"
-
-[[exemptions.vmdk-cli]]
-version = "0.8.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.vmdk-core]]
-version = "0.8.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.vmdk-forensic]]
-version = "0.8.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.windows-link]]
