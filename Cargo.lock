@@ -591,6 +591,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "safe-read"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64d801355149a8e005d4736b4b7c7871e65b5797c31bc9930f5a5483e8368a47"
+
+[[package]]
 name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -800,6 +806,7 @@ dependencies = [
  "forensic-vfs",
  "md-5",
  "proptest",
+ "safe-read",
  "serde",
  "serde_json",
  "sha2",

@@ -42,6 +42,8 @@ flate2    = { workspace = true }
 serde     = { workspace = true, optional = true }
 sha2      = { workspace = true }
 md-5      = { workspace = true }
+# Shared never-panic bounded byte readers for the grain directory / table decode.
+safe-read = { workspace = true }
 forensic-vfs = { version = "0.3", optional = true }
 
 [dev-dependencies]
