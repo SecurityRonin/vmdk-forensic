@@ -12,3 +12,18 @@ pub(crate) fn le_u32(b: &[u8]) -> u32 {
 pub(crate) fn le_u32_table(b: &[u8]) -> Vec<u32> {
     b.chunks_exact(4).map(le_u32).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn le_u32_short_slice_reads_zero_instead_of_panicking() {
+        assert_eq!(le_u32(&[1, 2, 3]), 0);
+    }
+
+    #[test]
+    fn le_u32_table_decodes_whole_entries_only() {
+        assert_eq!(le_u32_table(&[1, 0, 0, 0, 2, 0, 0, 0, 0xff]), vec![1, 2]);
+    }
+}
