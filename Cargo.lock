@@ -787,7 +787,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vmdk-cli"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "clap",
  "forensicnomicon",
@@ -799,7 +799,7 @@ dependencies = [
 
 [[package]]
 name = "vmdk-core"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "encoding_rs",
  "flate2",
@@ -817,7 +817,7 @@ dependencies = [
 
 [[package]]
 name = "vmdk-forensic"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "forensicnomicon",
  "serde",
