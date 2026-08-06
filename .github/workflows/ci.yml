@@ -9,111 +9,32 @@ on:
 permissions:
   contents: read
 
-env:
-  CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
-  RUSTFLAGS: -Dwarnings
-
 jobs:
-  fmt:
-    name: Format
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          components: rustfmt
-      - run: cargo fmt --check
+  ci:
+    uses: SecurityRonin/fleet-ci/.github/workflows/rust-ci.yml@a62ab10603151071744cec0b4e3638aa6406d4e4
+    with:
+      # Carries across the existing gate verbatim. The hand-written coverage job
+      # ran `cargo llvm-cov --workspace --all-features --summary-only
+      # --fail-under-lines 97`. The 97 is deliberate — the residual uncovered
+      # lines are env-gated paths that no honest `// cov:unreachable` annotation
+      # covers. Inheriting the default strict per-line gate would raise the bar,
+      # so the floor moves across unchanged.
+      coverage-gate: floor
+      coverage-floor: 97
+      # The corpus job builds its VMDK fixtures with qemu-img, so the runner
+      # needs qemu-utils before anything links or runs. The hand-written
+      # workflow installed it with an explicit `sudo apt-get install -y
+      # qemu-utils` step; this input is the same decision expressed as config.
+      system-packages: qemu-utils
+      # The hand-written test job ran on ubuntu-latest only — no `matrix.os`.
+      # qemu-utils is a Linux package, so the fixture path is Linux-only by
+      # construction. Leaving the default (true) would add macOS and Windows
+      # runners that cannot satisfy that dependency.
+      os-matrix: false
 
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-      - run: cargo test --workspace
-
-  deny:
-    name: Cargo Deny
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: EmbarkStudios/cargo-deny-action@3fd3802e88374d3fe9159b834c7714ec57d6c979 # v2.0.15
-
-  msrv:
-    name: MSRV (1.85)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@c56a35af9328d0bc581dc86c05e58f97f7c38a0e # 1.85
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-      - run: cargo test --workspace
-
-  corpus:
-    name: Corpus (real-world VMDK images)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-      - name: Run real-world image tests (data committed to repo)
-        run: cargo test --workspace -- --nocapture
-
-  fuzz:
-    name: Fuzz (smoke)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # nightly
-        with:
-          toolchain: nightly
-          components: rust-src
-      - run: cargo install cargo-fuzz
-      # `cargo fuzz` needs nightly `-Z` flags; force `+nightly` so the
-      # rust-toolchain.toml pin (stable) can't override it — a `+toolchain` on
-      # the command line beats the toml.
-      - run: cargo +nightly fuzz build
-      # Seed each corpus with the committed real-world images, then fuzz briefly. Any
-      # crash on crafted/corrupted input fails the build.
-      - name: Smoke-fuzz every target (seeded)
-        run: |
-          for t in fuzz_open fuzz_read fuzz_recover fuzz_forensic; do
-            mkdir -p "fuzz/corpus/$t"
-            cp core/tests/data/*.vmdk "fuzz/corpus/$t/" 2>/dev/null || true
-            cargo +nightly fuzz run "$t" -- -max_total_time=45 -rss_limit_mb=4096
-          done
-
-  secrets:
-    name: Secret Scan (gitleaks)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-      - name: Install gitleaks
-        env:
-          # Pinned to avoid the GitHub API "latest" lookup, which is rate-limited for
-          # unauthenticated requests and intermittently returns an empty version
-          # (breaking the download URL → `gzip: unexpected end of file`).
-          GITLEAKS_VERSION: 8.30.1
-        run: |
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            | tar xz -C /tmp gitleaks
-      - name: Run gitleaks
-        run: /tmp/gitleaks detect --source .
-
+  # Repo-specific unsafe reporting, not a gate (`continue-on-error: true`), and
+  # the reusable workflow has no equivalent job. Copied verbatim from the
+  # hand-written ci.yml so adoption neither drops nor alters it.
   geiger:
     name: Unsafe Audit (cargo-geiger)
     runs-on: ubuntu-latest
@@ -124,38 +45,3 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
       - run: cargo install cargo-geiger --locked
       - run: cargo geiger 2>&1 || true
-
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          components: llvm-tools-preview
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-      # qemu-img makes the COWD/seSparse cross-validation tests run (rather than skip),
-      # so coverage is deterministic and matches local measurement.
-      - name: Install qemu-img
-        run: sudo apt-get update && sudo apt-get install -y qemu-utils
-      - run: cargo install cargo-llvm-cov --locked
-      # Regression backstop at 97% lines (actual ~97.7%). The uncovered remainder is
-      # fault-injection error arms, environment-conditional test guards, and a few
-      # defensive guards — not worth contriving tests or coverage-exclusions for.
-      - run: cargo llvm-cov --workspace --all-features --summary-only --fail-under-lines 97
-
-  vet:
-    name: Cargo Vet (supply-chain)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-      - name: Install cargo-vet
-        uses: taiki-e/install-action@59012be0884e296ca2da49b530610e72c49039ad # v2.81.6
-        with:
-          tool: cargo-vet
-      - name: Fetch dependencies
-        run: cargo fetch
-      - name: Check supply chain
-        run: cargo vet --locked
-
