@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.4](https://github.com/SecurityRonin/vmdk-forensic/compare/vmdk-core-v0.8.3...vmdk-core-v0.8.4) - 2026-08-07
+
+### Fixed
+
+- *(docs)* repair intra-doc links the rustdoc gate rejects
+
 ## [0.8.3](https://github.com/SecurityRonin/vmdk-forensic/compare/vmdk-core-v0.8.2...vmdk-core-v0.8.3) - 2026-08-05
 
 ### Fixed
