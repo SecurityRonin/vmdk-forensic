@@ -131,7 +131,7 @@ pub fn test_sparse_vmdk_sparse_then_allocated(grain1_data: &[u8]) -> Vec<u8> {
 /// Sectors 2-9: padding to sector 10 (`gd_offset`)
 /// Sector 10:   GD (one u64 entry = 1, pointing to GT table index 1)
 /// Sectors 11-74: GT (index 1 = sectors 11 to 74; 64 sectors = 4096 × 8-byte GTEs)
-///              GTE[0] = sector 75 (grain data)
+///              `GTE[0]` = sector 75 (grain data)
 /// Sector 75:   grain data (8 sectors = 4 KiB)
 #[cfg_attr(not(any(test, feature = "test-helpers")), allow(dead_code))]
 pub fn test_sesparse_vmdk(sector_data: &[u8]) -> Vec<u8> {
@@ -389,7 +389,7 @@ const COM_GT_SECTOR: u64 = 27;
 const COM_GRAIN_SECTOR: u64 = 128;
 const COM_MARKER_BYTES: usize = 12; // 8-byte LBA + 4-byte dataSize
 
-/// Build a streamOptimized VMDK with GTE[0] pointing to a `GrainMarker` whose
+/// Build a streamOptimized VMDK with `GTE[0]` pointing to a `GrainMarker` whose
 /// `data_size` field is set to `marker_data_size`.
 ///
 /// No compressed payload is present after the 12-byte marker.  Any attempt to

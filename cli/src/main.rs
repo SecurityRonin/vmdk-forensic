@@ -512,7 +512,7 @@ fn cmd_hash(path: &std::path::Path, recover: bool) -> ExitCode {
 
 /// Build the `RGD:` status line for `verify` from the redundant-GD recovery report.
 ///
-/// `matches` is [`vmdk::VmdkReader::validate_rgd`]'s verdict; `rec` is the
+/// `matches` is [`vmdk_forensic::VmdkIntegrity::validate_rgd`]'s verdict; `rec` is the
 /// per-entry recovery analysis. Distinguishes a truly absent RGD from one that is
 /// present but diverges — and, when the primary GD is damaged, reports how much of
 /// it the RGD can recover (information qemu-img cannot provide).
