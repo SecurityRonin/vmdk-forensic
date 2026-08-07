@@ -5,7 +5,7 @@ members = ["core", "forensic", "cli"]
 # Single source of truth for fields shared by every member (DRY): bump version /
 # MSRV / license here once; members inherit via `field.workspace = true`.
 [workspace.package]
-version = "0.8.3"
+version = "0.8.4"
 edition = "2021"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -15,7 +15,7 @@ repository = "https://github.com/SecurityRonin/vmdk-forensic"
 # members write `dep.workspace = true`. The inter-crate `vmdk` version lives here
 # too, so a bump touches one line instead of every member + dev-dep + cli.
 [workspace.dependencies]
-vmdk = { path = "core", version = "0.8.3", package = "vmdk-core" }
+vmdk = { path = "core", version = "0.8.4", package = "vmdk-core" }
 forensicnomicon = "1"
 safe-read = "0.2"
 encoding_rs = "0.8"
