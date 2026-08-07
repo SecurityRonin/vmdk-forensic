@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   ci:
-    uses: SecurityRonin/fleet-ci/.github/workflows/rust-ci.yml@a62ab10603151071744cec0b4e3638aa6406d4e4
+    uses: SecurityRonin/fleet-ci/.github/workflows/rust-ci.yml@f9802dca64a95eb881fd05dd3f4f16e53b97f2b3
     with:
       # Carries across the existing gate verbatim. The hand-written coverage job
       # ran `cargo llvm-cov --workspace --all-features --summary-only
